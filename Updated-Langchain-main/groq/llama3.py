@@ -18,7 +18,7 @@ load_dotenv()
 ## load the GROQ And OpenAI API KEY 
 #os.environ['OPENAI_API_KEY']=os.getenv("OPENAI_API_KEY")
 groq_api_key=os.getenv('GROQ_API_KEY')
-#groq_api_key='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'
+#groq_api_key='gs5gC'
 
 
 st.title("Chatgroq With Llama3 Demo")
