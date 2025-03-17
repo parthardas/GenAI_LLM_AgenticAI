@@ -80,8 +80,6 @@ def greet(state: OrderState) -> OrderState:
     #llm = get_llm()
     
     # If this is the first message, greet the customer
-    #if len(state["messages"]) == 0 or state["current_step"] == "start":
-    #if len(state["messages"]) == 0 or state["current_step"] == "start":
     if state["current_step"] == "start":
         menu = format_menu()
         system_prompt = f"""
@@ -110,13 +108,7 @@ def greet(state: OrderState) -> OrderState:
 
 def process_order(state: OrderState) -> OrderState:
     """Process customer's order input"""
-    #llm = get_llm()
-    
-    # Get the last user message
-    #last_user_message = next((msg for msg in reversed(state["messages"]) if msg["role"] == "user"), None)
-    
-    # if not last_user_message:
-    #     return state
+
     
     # Prepare conversation history for the LLM
     conversation = [
@@ -150,58 +142,11 @@ def process_order(state: OrderState) -> OrderState:
         """}
     ]
     
-    # Add conversation history
-    #for msg in state["messages"]:
-    #    conversation.append({"role": msg["role"], "content": msg["content"]})
-    
-    #state["messages"].append({"role": "user", "content": last_user_message["content"]})
+
 
     # Get response from LLM
     response = llm.invoke(state["messages"])
     
-    # Try to extract order items from the response
-    # try:
-    #     # Use another LLM call to extract structured data
-    #     extraction_prompt = f"""
-    #     Based on this conversation, extract the order items as a JSON array.
-    #     Each item should have: "item" (string), "quantity" (number), "customizations" (string or null), "category" (string), "price" (number)
-        
-    #     Conversation:
-    #     {json.dumps(state["messages"])}
-        
-    #     Only return valid JSON without any explanation or markdown formatting.
-    #     """
-        
-    #     extraction_response = client.chat.completions.create(
-    #         model="gpt-4o",
-    #         response_format={"type": "json_object"},
-    #         messages=[{"role": "user", "content": extraction_prompt}]
-    #     )
-        
-    #     extracted_data = json.loads(extraction_response.choices[0].message.content)
-        
-    #     if "order_items" in extracted_data:
-    #         # Update order items in state
-    #         for item in extracted_data["order_items"]:
-    #             # Verify item exists in menu
-    #             item_found = False
-    #             for category, items in MENU.items():
-    #                 if item["item"] in items:
-    #                     item["category"] = category
-    #                     item["price"] = items[item["item"]]
-    #                     item_found = True
-    #                     break
-                
-    #             if item_found and item not in state["order_items"]:
-    #                 state["order_items"].append(item)
-    
-    #     # If customer name is provided, update it
-    #     if "customer_name" in extracted_data and extracted_data["customer_name"]:
-    #         state["customer_name"] = extracted_data["customer_name"]
-    
-    # except Exception as e:
-    #     # If extraction fails, just continue the conversation
-    #     pass
     
     # Add assistant response to messages
     state["messages"].append({"role": "assistant", "content": response.content})
@@ -214,7 +159,6 @@ def process_order(state: OrderState) -> OrderState:
     
     return state
 
-def confirm_order(state: OrderState) -> OrderState:
     """Confirm the order details with the customer"""
     #llm = get_llm()
     
@@ -258,7 +202,6 @@ def confirm_order(state: OrderState) -> OrderState:
     
     return state
 
-def handle_confirmation_response(state: OrderState) -> OrderState:
     """Process the customer's response to order confirmation"""
     #llm = get_llm()
     
@@ -303,41 +246,6 @@ def handle_confirmation_response(state: OrderState) -> OrderState:
     
     return state
 
-def get_customer_name(state: OrderState) -> OrderState:
-    """Get the customer's name for the order"""
-    # Get the last user message
-    last_user_message = next((msg for msg in reversed(state["messages"]) if msg["role"] == "user"), None)
-    
-    if not last_user_message:
-        return state
-    
-    # Extract name from message
-    name_prompt = f"""
-    Extract the customer's name from this message: "{last_user_message['content']}"
-    Return only the name, nothing else.
-    """
-    
-    name_response = client.chat.completions.create(
-        model="gpt-4o",
-        messages=[{"role": "user", "content": name_prompt}]
-    )
-    
-    extracted_name = name_response.choices[0].message.content.strip()
-    
-    # Update state with customer name
-    state["customer_name"] = extracted_name
-    
-    # Prepare thank you message
-    thank_you = f"Thank you, {extracted_name}! Your order has been confirmed and will be ready shortly."
-    state["messages"].append({"role": "assistant", "content": thank_you})
-    
-    # Update state
-    state["order_confirmed"] = True
-    state["current_step"] = "submit_order"
-    
-    return state
-
-def submit_order(state: OrderState) -> OrderState:
     """Submit the confirmed order"""
     # In a real system, this would connect to a backend order processing system
     # For this demo, we'll just mark it as submitted
@@ -380,14 +288,6 @@ def router(state: OrderState) -> str:
         return "greet"
     elif current_step == "taking_order":
         return "process_order"
-    elif current_step == "confirm_order":
-        return "confirm_order"
-    elif current_step == "awaiting_confirmation":
-        return "handle_confirmation"
-    elif current_step == "get_customer_name":
-        return "get_customer_name"
-    elif current_step == "submit_order":
-        return "submit_order"
     elif current_step == "complete":
         return END
     else:
@@ -402,28 +302,18 @@ def build_graph():
     #workflow.add_node(START)
     workflow.add_node("greet", greet)
     workflow.add_node("process_order", process_order)
-    #workflow.add_node("confirm_order", confirm_order)
-    #workflow.add_node("handle_confirmation", handle_confirmation_response)
-    #workflow.add_node("get_customer_name", get_customer_name)
-    #workflow.add_node("submit_order", submit_order)
+
     
     # Add edges
     workflow.add_edge(START, "greet")
     workflow.add_edge("greet", "process_order")
-    #workflow.add_conditional_edges("process_order", router)
-    #workflow.add_conditional_edges("confirm_order", router)
-    #workflow.add_conditional_edges("handle_confirmation", router)
-    #workflow.add_conditional_edges("get_customer_name", router)
-    #workflow.add_conditional_edges("submit_order", router)
+
     workflow.add_edge("process_order", END)
 
     # Compile the graph
     return workflow.compile()
 
 # Initialize session state
-# no need to maintain a parallel chat_history, because duplication may leave some meaages out
-#if "chat_history" not in st.session_state:
-#    st.session_state.chat_history = []
 
 if "order_graph" not in st.session_state:
     st.session_state.order_graph = build_graph()
@@ -454,21 +344,7 @@ if st.button("Start New Order"):
     with st.chat_message("assistant"):
         
         state=greet(st.session_state.order_state)
-        # st.write("Hello! Welcome to our cafe. We are taking your new order. \
-        #          Please proceed. If you want to quit, just close the window. \
-        #          If you were proceeding with another order before this, please \
-        #          note that that order details have been deleted." + f"\n\n{state['messages'][-1]['content']}")
-        # #st.write(state["messages"][-1]["content"])
-# else:
-#     # do nothing
-#     #st.stop()
-#     # disable button
-#     if "order_state" in st.session_state:
-#         st.session_state.b1_disabled = True
-#     else:
-#         st.session_state.b1_disabled = False
-#st.rerun()
-
+ 
 if "order_state" not in st.session_state:
     st.session_state.order_state = {
         "messages": [],
@@ -480,15 +356,6 @@ if "order_state" not in st.session_state:
     }
 
 # Initialize chat history
-#if "messages" not in st.session_state:
-#    st.session_state.messages = []
-
-
-# Display chat history
-#for message in st.session_state.messages:
-#    with st.chat_message(message["role"]):
-#        st.markdown(message["content"])
-#for message in st.session_state.chat_history:
 for message in st.session_state.order_state["messages"]:
     if message["role"] != "system":  # Skip system messages
         with st.chat_message(message["role"]):
@@ -496,70 +363,19 @@ for message in st.session_state.order_state["messages"]:
 
 # User input
 if prompt := st.chat_input("Type your message here..."):
-    # Display user message
-    #with st.chat_message("user"):
-    #    st.write(prompt)
-
-    # if st.session_state.order_state['current_step'] == "start":
-    #     state=greet(st.session_state.order_state)
-        #st.session_state.order_state = greet(st.session_state.order_state)
-    
-    #for message in state["messages"]:
-    #    with st.chat_message(message["role"]):
-    #        st.write(message["content"])
-    
-    # Add prompt to chat history
-    # no need to maintain a parallel chat_history, because duplication may leave some meaages out
-    #st.session_state.chat_history.append({"role": "user", "content": prompt})
-
     # Add prompt to state messages
     st.session_state.order_state["messages"].append({"role": "user", "content": prompt})
     
 
     # Generate bot response
-    #if input:= st.session_state.chat_history:
-    #    bot_response=llm.invoke(input).content
-    #else:
-    #    bot_response=llm.invoke(input).content
-    #bot_response=llm.invoke(st.session_state.chat_history).content
     bot_response=llm.invoke(st.session_state.order_state['messages']).content
-
-    # Add bot response to chat history
-    # no need to maintain a parallel chat_history, because duplication may leave some meaages out
-    #st.session_state.chat_history.append({"role": "assistant", "content": bot_response})
 
     # Add bot response to state messages
     st.session_state.order_state["messages"].append({"role": "assistant", "content": bot_response})
     
     # Display last chat
-    #with st.chat_message(st.session_state.messages[-1]["role"]):
-    #with st.chat_message(st.session_state.chat_history[-2]["role"]):
-    #   st.markdown(st.session_state.chat_history[-2]["content"])
-    #with st.chat_message(st.session_state.chat_history[-1]["role"]):
-    #    st.markdown(st.session_state.chat_history[-1]["content"])
-    
-    #with st.chat_message(st.session_state.order_state[-2]["role"]):
     with st.chat_message(st.session_state.order_state["messages"][-2]["role"]):
         st.markdown(st.session_state.order_state["messages"][-2]["content"])
     with st.chat_message(st.session_state.order_state["messages"][-1]["role"]):
         st.markdown(st.session_state.order_state["messages"][-1]["content"])
 
-
- 
-
-    # Process with graph
-    #result = st.session_state.order_graph.invoke(st.session_state.order_state, {"recursion_limit": 1})
-
-    # Update state
-    #st.session_state.order_state = result
-    
-    # Display assistant responses
-    #for message in result["messages"]:
-    #    if message["role"] == "assistant" and message not in st.session_state.chat_history:
-    #        with st.chat_message("assistant"):
-    #            st.write(message["content"])
-    #        st.session_state.chat_history.append(message)
-
-
-
-#st.rerun()
