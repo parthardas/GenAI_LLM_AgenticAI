@@ -12,7 +12,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy the application code
 COPY react-agent-cafe-order-bot.py .
-COPY .env .
+#COPY .env .
 
 # Expose the port Streamlit runs on
 EXPOSE 8501
