@@ -1,6 +1,7 @@
 import streamlit as st
 from typing import TypedDict, List, Dict, Annotated, Literal
 from langgraph.graph import END, StateGraph
+from langchain_groq import ChatGroq
 from groq import Groq
 import json
 from pydantic import BaseModel, Field
@@ -17,7 +18,10 @@ os.environ["LANGCHAIN_TRACING_V2"] = "true"
 os.environ["LANGCHAIN_PROJECT"] = "Simplified-ReAct-Bistro-Chatbot"
 
 # Initialize Groq client with API key from environment
-groq_client = Groq(api_key=groq_api_key)
+#groq_client = Groq(api_key=groq_api_key)
+#llm=ChatGroq(model_name="llama3-70b-8192")
+llm=Groq(api_key=groq_api_key)
+
 
 # Define our order item structure
 class OrderItem(BaseModel):
@@ -116,7 +120,8 @@ def generate_response(state: State) -> State:
     """
     
     # Call the Llama model on Groq
-    response = groq_client.chat.completions.create(
+    response = llm.chat.completions.create(
+    #response = llm.invoke(
         model="llama3-8b-8192",
         messages=[
             {"role": "system", "content": formatted_system_prompt},
