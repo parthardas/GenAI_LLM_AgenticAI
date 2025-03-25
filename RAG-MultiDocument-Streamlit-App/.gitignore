@@ -1,0 +1,4 @@
+.env
+req-frozen.txt
+requirements.in
+requirements.txt.old

@@ -1,0 +1,5 @@
+# Optional: Specify the LLM model to use
+#LLM_MODEL=meta-llama/Meta-Llama-3.1-405B-Instruct
+
+# Optional: Specify the directory for storing documents
+DIRECTORY=meeting_notes
