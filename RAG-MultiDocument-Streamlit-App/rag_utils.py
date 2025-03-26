@@ -20,7 +20,7 @@ load_dotenv()
 
 # Default model can be changed via environment variable
 MODEL = os.getenv('LLM_MODEL', 'meta-llama/Meta-Llama-3.1-405B-Instruct')
-RAG_DIRECTORY = os.getenv('DIRECTORY', 'meeting_notes')
+RAG_DIRECTORY = os.getenv('DIRECTORY', 'uploads')
 
 # from langchain_community.document_loaders import PyPDFLoader
 # loader = PyPDFLoader("attention.pdf")
@@ -109,7 +109,9 @@ def get_retriever():
     #return Chroma.from_documents(docs, embedding_function)
 
     # Create the FAISS vector store
-    return FAISS.from_documents(docs,embedding_function)
+    #return FAISS.from_documents(docs,embedding_function)
+    faiss_store = FAISS.from_documents(docs, embedding_function)
+    return faiss_store
 
 def query_documents(question):
     """

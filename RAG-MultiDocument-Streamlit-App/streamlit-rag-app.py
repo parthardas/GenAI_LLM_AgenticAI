@@ -22,7 +22,7 @@ def initialize_session_state():
         ]
     
     if "rag_directory" not in st.session_state:
-        st.session_state.rag_directory = "meeting_notes"
+        st.session_state.rag_directory = "uploads"
 
 def file_uploader():
     """
@@ -60,7 +60,8 @@ def display_chat_history():
     for message in st.session_state.messages:
         message_json = json.loads(message.json())
         message_type = message_json["type"]
-        if message_type in ["human", "ai", "system"]:
+        #if message_type in ["human", "ai", "system"]:
+        if message_type in ["human", "ai"]:
             with st.chat_message(message_type):
                 st.markdown(message_json["content"])
 
