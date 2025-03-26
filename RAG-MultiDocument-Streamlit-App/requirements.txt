@@ -7,3 +7,4 @@ python-dotenv
 streamlit
 huggingface_hub
 langchain-huggingface
+faiss-cpu
