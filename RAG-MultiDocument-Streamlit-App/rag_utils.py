@@ -1,8 +1,9 @@
 from langchain_huggingface import HuggingFaceEndpoint, ChatHuggingFace
-from langchain_community.embeddings.sentence_transformer import SentenceTransformerEmbeddings
+#from langchain_community.embeddings.sentence_transformer import SentenceTransformerEmbeddings
 from langchain_core.messages import SystemMessage, AIMessage, HumanMessage
 from langchain_community.document_loaders import DirectoryLoader
 from langchain_text_splitters import CharacterTextSplitter
+from langchain_community.embeddings import HuggingFaceBgeEmbeddings
 from dotenv import load_dotenv
 from langchain_groq import ChatGroq
 import streamlit as st
@@ -41,7 +42,7 @@ def get_local_model():
     # )
 
     groq_api_key = os.getenv("GROQ_API_KEY")
-    llm=ChatGroq(model_name="llama3-70b-8192")
+    llm=ChatGroq(model="llama3-70b-8192")
 
     return llm
 
@@ -100,7 +101,8 @@ def get_retriever():
     docs = load_documents(RAG_DIRECTORY)
 
     # Create the open-source embedding function
-    embedding_function = SentenceTransformerEmbeddings(model_name="all-MiniLM-L6-v2")
+    #embedding_function = SentenceTransformerEmbeddings(model_name="all-MiniLM-L6-v2")
+    embedding_function = HuggingFaceBgeEmbeddings(model_name="BAAI/bge-large-en-v1.5")
     
     #retriever=vectordb.as_retriever()
     #retriever

@@ -2,6 +2,7 @@ import streamlit as st
 from datetime import datetime
 import os
 import json
+import shutil
 from langchain_core.messages import SystemMessage, AIMessage, HumanMessage
 
 
@@ -58,7 +59,7 @@ def file_uploader():
 def display_chat_history():
     """Display chat history from session state."""
     for message in st.session_state.messages:
-        message_json = json.loads(message.json())
+        message_json = json.loads(message.model_dump_json())
         message_type = message_json["type"]
         #if message_type in ["human", "ai", "system"]:
         if message_type in ["human", "ai"]:

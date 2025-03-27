@@ -1,8 +1,7 @@
-langchain_community
-langchain_core
-langchain_groq
-#langchain_huggingface
-langchain_text_splitters
+langchain-community
+langchain-core
+langchain-groq
+langchain-text-splitters
 python-dotenv
 streamlit
 huggingface_hub
