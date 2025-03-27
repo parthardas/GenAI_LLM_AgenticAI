@@ -7,3 +7,5 @@ streamlit
 huggingface_hub
 langchain-huggingface
 faiss-cpu
+sentence-transformers
+pypdf
