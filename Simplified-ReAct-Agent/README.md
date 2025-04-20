@@ -2,9 +2,10 @@
 
 Salient updates compared to the older Cafe Order Chat Bot:
 
-1. The order totaling is done now at the LLM by proper prompt tuning and Pydantic structure enforcement and LLM output parsing
-2. The Order total on the side bar now always shows the latest order total
-3. Replaced Groq with HuggingFace endpoint and Llama3.2-70B with mistralai/Mixtral-8x7B-Instruct-v0.1
+1. The order totaling is done now at the LLM by proper prompt tuning
+2. Pydantic LLM output structure enforcement by output parsing
+3. The Order total on the side bar now always shows the latest order total
+4. Replaced Groq with HuggingFace endpoint and Llama3.2-70B with mistralai/Mixtral-8x7B-Instruct-v0.1
 
 Otehr details are as follows:
 ## 🌟 Features
