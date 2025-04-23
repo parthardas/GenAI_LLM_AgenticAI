@@ -1,12 +1,25 @@
-version: '3'
-
 services:
   order-chatbot:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    # build:
+    #   context: .
+    #   dockerfile: Dockerfile
+  
+    image: parthardas/simplified-react-order-agent:latest
+    container_name: simplified-react-order-agent
+    
     ports:
-      - "8501:8501"
+      - 80:8501
     volumes:
       - ./.env:/app/.env
     restart: unless-stopped
+    networks:
+      default:
+
+networks:
+  default:
+    driver: bridge
+
+volumes:
+  data:
+  config:
+  bin:
