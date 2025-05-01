@@ -8,24 +8,29 @@ from dotenv import load_dotenv
 import json
 from langchain.output_parsers import PydanticOutputParser
 from langchain.prompts import PromptTemplate
-from langchain_community.llms import HuggingFaceEndpoint
+#from langchain_community.llms import HuggingFaceEndpoint
+#from groq import Groq
+from langchain_community.llms import Groq
 
 # Load environment variables
 load_dotenv()
-hf_api_key = os.environ['HUGGINGFACEHUB_API_TOKEN']
+#hf_api_key = os.environ['HUGGINGFACEHUB_API_TOKEN']
+groq_api_key = os.environ['GROQ_API_KEY']
 os.environ["LANGCHAIN_API_KEY"] = os.environ.get('LANGCHAIN_API_KEY')
 os.environ["LANGCHAIN_API_URL"] = "https://api.langchain.com/v1/graphql"
 os.environ["LANGCHAIN_TRACING_V2"] = "true"
 os.environ["LANGCHAIN_PROJECT"] = "Simplified-ReAct-Bistro-Chatbot"
 
 # Initialize LLM
-llm = HuggingFaceEndpoint(
-    endpoint_url="https://api-inference.huggingface.co/models/mistralai/Mixtral-8x7B-Instruct-v0.1",
-    huggingfacehub_api_token=hf_api_key,
-    temperature=0.1,
-    max_new_tokens=256,
-    return_full_text=False
-)
+# llm = HuggingFaceEndpoint(
+#     endpoint_url="https://api-inference.huggingface.co/models/mistralai/Mixtral-8x7B-Instruct-v0.1",
+#     huggingfacehub_api_token=hf_api_key,
+#     temperature=0.1,
+#     max_new_tokens=256,
+#     return_full_text=False
+# )
+#llm=Groq(api_key=groq_api_key)
+llm=Groq(model="Mixtral-8x7B-Instruct-v0.1", api_key=groq_api_key, temperature=0.1, max_new_tokens=256, return_full_text=False) 
 
 # Define our order item structure
 class OrderItem(BaseModel):
@@ -79,19 +84,23 @@ def generate_response(state: State) -> State:
     Current Step: {step}
     
     If in order_taking step:
-    - Greet the user if this is the start of the conversation
-    - Help users select items, modify quantities, or remove items
-    - Keep track of their order and the total
-    - Total should be calculated as sum of item price * quantity for each item
-    - If they ask for a specific item, check if it's on the menu and add it to their order
-    - If they ask for a total, provide the current total cost of their order
-    - If they ask to remove an item, remove it from their order
-    - If they ask to change the quantity, update it in their order
-    - If they ask for a summary, provide a summary of their order and total cost
-    - If they ask for a specific item not on the menu, politely inform them it's not available
-    - If they dispute the order total, recheck the order total and confirm
-    - Ask if they want to confirm their order when they're done
-    - ONLY move to confirm step when they explicitly agree to finalize
+    1. Greet the user if this is the start of the conversation
+    2. Help users select items, modify quantities, or remove items
+    3. Keep track of their order and the total
+    4. Follow the following set of instructions for calculating the total:
+        4.1. Do the first attempt at total calculation by calculating it as sum of (item_price * item_quantity) for each item
+        4.2. As the second attempt, calculate another value of the total by adding ALL the ordered items' prices one by one without grouping them
+        4.3. If the two answers differ, you identify and correct the mistake before responding.
+        4.4  Always proceed step-by-step as in Chain-of-thought while calculating the total.
+    5. If they ask for a specific item, check if it's on the menu and add it to their order
+    6. If they ask for a total, provide the current total cost of their order
+    7. If they ask to remove an item, remove it from their order
+    8. If they ask to change the quantity, update it in their order
+    9. If they ask for a summary, provide a summary of their order and total cost
+    10. If they ask for a specific item not on the menu, politely inform them it's not available
+    11. If they dispute the order total, recheck the order total using point 4 above and confirm
+    12. Ask if they want to confirm their order when they're done
+    13. Move to confirm step ONLY when they explicitly agree to finalize
     
     If in confirm step:
     - Summarize their complete order and total
