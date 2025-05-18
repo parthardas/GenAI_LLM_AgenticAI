@@ -1,37 +1,63 @@
+import os
+
+# Set the cache directory to something writable
+os.environ["HF_HOME"] = "/tmp/huggingface"
+os.environ["TRANSFORMERS_CACHE"] = "/tmp/huggingface/transformers"
+os.environ["HF_DATASETS_CACHE"] = "/tmp/huggingface/datasets"
+os.environ["HUGGINGFACE_HUB_CACHE"] = "/tmp/huggingface/hub"
+os.environ["XDG_CACHE_HOME"] = "/tmp/huggingface"
+os.makedirs("/tmp/huggingface", exist_ok=True)
+
 import streamlit as st
 from typing import TypedDict, List, Dict, Literal
 from langgraph.graph import END, StateGraph
 from pydantic import BaseModel, Field
 from datetime import datetime
-import os
-from dotenv import load_dotenv
+
+#from dotenv import load_dotenv
 import json
 from langchain.output_parsers import PydanticOutputParser
 from langchain.prompts import PromptTemplate
-#from langchain_community.llms import HuggingFaceEndpoint
+from langchain_community.llms import HuggingFaceEndpoint
 #from groq import Groq
-from langchain_groq import ChatGroq
-import re
+#from langchain_groq import ChatGroq
+#import re
+#import subprocess
+from huggingface_hub import login
 
 #from langchain_community.llms import Groq
 
 # Load environment variables
-load_dotenv()
+#load_dotenv()
 #hf_api_key = os.environ['HUGGINGFACEHUB_API_TOKEN']
-groq_api_key = os.environ['GROQ_API_KEY']
-os.environ["LANGCHAIN_API_KEY"] = os.environ.get('LANGCHAIN_API_KEY')
+hf_api_key = os.environ.get('HUGGINGFACEHUB_API_TOKEN')
+#groq_api_key = os.environ['GROQ_API_KEY']
+#os.environ["LANGCHAIN_API_KEY"] = os.environ.get('LANGCHAIN_API_KEY')
+lc_api_key = os.environ.get('LANGCHAIN_API_KEY')
 os.environ["LANGCHAIN_API_URL"] = "https://api.langchain.com/v1/graphql"
 os.environ["LANGCHAIN_TRACING_V2"] = "true"
 os.environ["LANGCHAIN_PROJECT"] = "Simplified-ReAct-Bistro-Chatbot"
 
-# Initialize LLM
-# llm = HuggingFaceEndpoint(
-#     endpoint_url="https://api-inference.huggingface.co/models/mistralai/Mixtral-8x7B-Instruct-v0.1",
-#     huggingfacehub_api_token=hf_api_key,
-#     temperature=0.1,
-#     max_new_tokens=256,
-#     return_full_text=False
+#os.environ["HUGGINGFACE_TOKEN"] = hf_api_key
+
+# # login to huggingface-cli
+# subprocess.run(
+#     ["huggingface-cli", "login", "--token", hf_api_key],
+#     check=True
 # )
+
+# HF login
+login(token=hf_api_key)
+
+# Initialize LLM
+llm = HuggingFaceEndpoint(
+    endpoint_url="https://api-inference.huggingface.co/models/mistralai/Mixtral-8x7B-Instruct-v0.1",
+    #endpoint_url="https://api-inference.huggingface.co/mistralai/Mixtral-8x7B-Instruct-v0.1",
+    huggingfacehub_api_token=hf_api_key,
+    temperature=0.1,
+    max_new_tokens=256,
+    return_full_text=False
+)
 #llm=Groq(api_key=groq_api_key)
 #client=Groq(api_key=groq_api_key)
 #llm=Groq(model="Mixtral-8x7B-Instruct-v0.1", api_key=groq_api_key, temperature=0.1, max_new_tokens=256, return_full_text=False) 
@@ -40,7 +66,7 @@ os.environ["LANGCHAIN_PROJECT"] = "Simplified-ReAct-Bistro-Chatbot"
 #llm=ChatGroq(model="mistral-saba-24b")
 #llm=ChatGroq(model="llama3-8b-8192")
 #llm=ChatGroq(model="llama3-8b-8192", temperature=0.2)
-llm=ChatGroq(model="gemma2-9b-it", temperature=0.2)
+#llm=ChatGroq(model="gemma2-9b-it", temperature=0.2)
 
 
 # Define our order item structure
@@ -81,7 +107,7 @@ class State(TypedDict):
 def generate_response(state: State) -> State:
     # Construct the prompt based on conversation history and current state
     system_prompt = """
-    You are an ordering assistant for a restaurant. Be friendly, concise, and helpful.
+    <s>[INST] You are an ordering assistant for a restaurant. Be friendly, concise, and helpful.
     
     MENU:
     - Burger: $5.99
@@ -123,6 +149,7 @@ def generate_response(state: State) -> State:
     F2. Here is the format instructions:
     {format_instructions}
     F3. Do not include any other keys in the JSON response
+    [/INST]
     """
     
     # Get the chat history for context
@@ -160,8 +187,7 @@ def generate_response(state: State) -> State:
 
     # Generate the prompt
     _input = prompt.format_prompt()
-    #response = llm(_input.to_string())
-    response = llm.invoke(_input.to_string())
+    response = llm(_input.to_string())
     
     # Parse the output
     try:
@@ -172,39 +198,8 @@ def generate_response(state: State) -> State:
     except Exception as e:
         print(f"Error parsing output: {e}")
         print(f"Raw response: {response}")
-        #return None
-        # Try to extract JSON from the response using regex
-        try:
-            # Find JSON-like structure in the text
-            #json_match = re.search(r'\{.*\}', response)
-            #json_match = re.search(r'```json\n(\{.*?\})\n```', str(response), re.DOTALL)
-            json_match = re.search(r'(```json\n\{).*(\}\n```)', str(response), re.DOTALL)
-            #json_match = re.search(r'\{.*\}', str(response), re.DOTALL)
-            if json_match:
-                json_str = json_match.group(1)
-                print(f"Extracted JSON string: {json_str}")
-                # Parse the JSON string
-                parsed_json = json.loads(json_str)
-                print(f"Extracted JSON: {parsed_json}")
-
-                # Populate state with extracted JSON
-                if "order" in parsed_json:
-                    state["order"] = parsed_json["order"]
-                if "response" in parsed_json:
-                    state["history"].append({"role": "assistant", "content": parsed_json["response"]})
-                if "next_step" in parsed_json:
-                    state["current_step"] = parsed_json["next_step"]
-                
-                return state
-            
-        except Exception as json_error:
-            print(f"Error extracting JSON: {json_error}")
-            # If JSON extraction fails, create a basic response
-            state["history"].append({
-                "role": "assistant", 
-                "content": "I apologize, but I couldn't process that correctly. Could you please rephrase your request?"
-            })
-            #state["current_step"] = "order_taking"
+        return None
+    
     return state
 
 # Function to process user input
@@ -284,10 +279,7 @@ def show_sidebar():
     with st.sidebar:
         # Show current order summary in the sidebar
         st.subheader("Current Order")
-        #order_dict = st.session_state.state["order"].model_dump()
-        order_dict = st.session_state.state["order"]
-        if isinstance(order_dict, Order):
-            order_dict = order_dict.model_dump()
+        order_dict = st.session_state.state["order"].model_dump()
         if order_dict["items"]:
             for item in order_dict["items"]:
                 st.write(f"{item['quantity']}x {item['item']} - ${item['price'] * item['quantity']:.2f}")
@@ -330,13 +322,9 @@ def main():
             st.session_state.started = True
             initial_state = st.session_state.state
             initial_state["user_input"] = "Hello, I'd like to place an order"
-
             result = order_graph.invoke(initial_state)
             st.session_state.state = result
-            print(result)
-            #assistant_response = result["history"][-1]["content"]
-            assistant_response = result["response"]
-            
+            assistant_response = result["history"][-1]["content"]
             st.session_state.messages.append({"role": "user", "content": "Hello, I'd like to place an order"})
             st.session_state.messages.append({"role": "assistant", "content": assistant_response})
             st.rerun()
@@ -353,9 +341,7 @@ def main():
             result = order_graph.invoke(current_state)
             st.session_state.state = result
             
-            #assistant_response = result["history"][-1]["content"] if result["history"] else "I couldn't process your order. Please try again."
-            assistant_response = result["response"] if result["response"] else "I couldn't process your order. Please try again."
-            
+            assistant_response = result["history"][-1]["content"] if result["history"] else "I couldn't process your order. Please try again."
             st.session_state.messages.append({"role": "assistant", "content": assistant_response})
             
             with st.chat_message("assistant"):
