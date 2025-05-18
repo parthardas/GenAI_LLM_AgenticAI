@@ -1,27 +1,28 @@
-from langchain_huggingface import HuggingFaceEndpoint, ChatHuggingFace
+#from langchain_huggingface import HuggingFaceEndpoint, ChatHuggingFace
 #from langchain_community.embeddings.sentence_transformer import SentenceTransformerEmbeddings
-from langchain_core.messages import SystemMessage, AIMessage, HumanMessage
-from langchain_community.document_loaders import DirectoryLoader
+from langchain_core.messages import HumanMessage
+#from langchain_community.document_loaders import DirectoryLoader
 from langchain_text_splitters import CharacterTextSplitter
-from langchain_community.embeddings import HuggingFaceBgeEmbeddings
-from dotenv import load_dotenv
+#from langchain_community.embeddings import HuggingFaceBgeEmbeddings
+#from dotenv import load_dotenv
 from langchain_groq import ChatGroq
 import streamlit as st
 import os
 from langchain_community.vectorstores import FAISS
 from langchain_community.document_loaders import (
-    DirectoryLoader, 
     PyPDFLoader,  # Alternative PDF loader
     TextLoader
 )
 
-from langchain_core.messages import SystemMessage, AIMessage, HumanMessage
+#from langchain_core.messages import SystemMessage, AIMessage, HumanMessage
+from langchain.embeddings import HuggingFaceEmbeddings
 
-load_dotenv()
+#load_dotenv()
 
 # Default model can be changed via environment variable
-MODEL = os.getenv('LLM_MODEL', 'meta-llama/Meta-Llama-3.1-405B-Instruct')
-RAG_DIRECTORY = os.getenv('DIRECTORY', 'uploads')
+#MODEL = os.getenv('LLM_MODEL', 'meta-llama/Meta-Llama-3.1-405B-Instruct')
+MODEL = os.getenv('LLM_MODEL', 'meta-llama/Llama-3.1-8B')
+RAG_DIRECTORY = os.getenv('DIRECTORY', '/tmp/uploads')
 
 # from langchain_community.document_loaders import PyPDFLoader
 # loader = PyPDFLoader("attention.pdf")
@@ -84,7 +85,7 @@ def load_documents(directory):
     documents = pdf_docs + txt_docs
 
     # Split the documents into chunks
-    text_splitter = CharacterTextSplitter(chunk_size=1000, chunk_overlap=0)
+    text_splitter = CharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
     docs = text_splitter.split_documents(documents)
 
     return docs
@@ -102,8 +103,13 @@ def get_retriever():
 
     # Create the open-source embedding function
     #embedding_function = SentenceTransformerEmbeddings(model_name="all-MiniLM-L6-v2")
-    embedding_function = HuggingFaceBgeEmbeddings(model_name="BAAI/bge-large-en-v1.5")
-    
+    #embedding_function = HuggingFaceBgeEmbeddings(model_name="BAAI/bge-large-en-v1.5")
+    # embedding_function = HuggingFaceEmbeddings(
+    #         model_name="BAAI/bge-large-en-v1.5",
+    #         model_kwargs={'device': 'cpu'},
+    #         encode_kwargs={'normalize_embeddings': True}
+    #     )
+    embedding_function = HuggingFaceEmbeddings(model_name="BAAI/bge-large-en-v1.5")
     #retriever=vectordb.as_retriever()
     #retriever
 

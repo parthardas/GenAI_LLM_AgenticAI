@@ -1,11 +1,22 @@
-langchain-community
-langchain-core
-langchain-groq
-langchain-text-splitters
-python-dotenv
-streamlit
-huggingface_hub
-langchain-huggingface
-faiss-cpu
-sentence-transformers
-pypdf
+# langchain-community
+# langchain-core
+# langchain-groq
+# langchain-text-splitters
+# python-dotenv
+# streamlit
+# huggingface_hub
+# langchain-huggingface
+# faiss-cpu
+# sentence-transformers
+# pypdf
+faiss-cpu==1.10.0
+huggingface-hub==0.29.3
+langchain-community==0.3.20
+langchain-core==0.3.48
+langchain-groq==0.2.3
+langchain-huggingface==0.1.2
+langchain-text-splitters==0.3.7
+pypdf==5.4.0
+#python-dotenv==1.0.1
+#sentence-transformers==3.4.1
+streamlit==1.41.1

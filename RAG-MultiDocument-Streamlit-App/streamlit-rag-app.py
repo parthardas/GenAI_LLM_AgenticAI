@@ -23,7 +23,7 @@ def initialize_session_state():
         ]
     
     if "rag_directory" not in st.session_state:
-        st.session_state.rag_directory = "uploads"
+        st.session_state.rag_directory = "/tmp/uploads"
 
 def file_uploader():
     """

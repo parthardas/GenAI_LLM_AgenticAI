@@ -1,5 +1,6 @@
 # Optional: Specify the LLM model to use
 #LLM_MODEL=meta-llama/Meta-Llama-3.1-405B-Instruct
+LLM_MODEL=meta-llama/Llama-3.1-8B
 
 # Optional: Specify the directory for storing documents
-DIRECTORY=uploads
+DIRECTORY=/tmp/uploads
