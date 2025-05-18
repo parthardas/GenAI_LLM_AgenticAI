@@ -3,3 +3,17 @@ req-frozen.txt
 requirements.in
 requirements.txt.old
 old/
+env-file.txt
+frz
+README.md
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+.cache/
+datasets/
+models/
+*.whl
+*.egg-info/
+venv/

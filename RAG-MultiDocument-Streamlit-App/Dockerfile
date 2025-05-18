@@ -1,18 +1,25 @@
 # Use Python 3.10 as a base image
-FROM python:3.13.1-slim
+#FROM python:3.13.1-slim
+FROM python:3.10-slim
+
+# Set environment variables to avoid caching issues with Hugging Face
+ENV HF_HOME=/tmp/huggingface \
+    TRANSFORMERS_CACHE=/tmp/huggingface/transformers \
+    HF_DATASETS_CACHE=/tmp/huggingface/datasets \
+    HUGGINGFACE_HUB_CACHE=/tmp/huggingface/hub \
+    XDG_CACHE_HOME=/tmp/huggingface
 
 # Set working directory
 WORKDIR /app
 
-# Copy requirements first to leverage Docker cache
-COPY requirements.txt .
+# Copy files to the container
+COPY requirements.txt streamlit-rag-app.py rag_utils.py ./
 
-# Install dependencies
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Copy the application code
-COPY streamlit-rag-app.py .
-COPY rag_utils.py .
+# Install dependencies and pre-download model
+RUN pip install --no-cache-dir -r requirements.txt && \
+    python -c "from transformers import AutoTokenizer, AutoModel; \
+    AutoTokenizer.from_pretrained('BAAI/bge-large-en-v1.5'); \
+    AutoModel.from_pretrained('BAAI/bge-large-en-v1.5')"
 
 # Expose the port Streamlit runs on
 EXPOSE 8501
