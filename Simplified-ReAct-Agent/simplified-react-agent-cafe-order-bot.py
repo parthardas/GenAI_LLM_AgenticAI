@@ -25,6 +25,21 @@ os.environ["LANGCHAIN_TRACING_V2"] = "true"
 os.environ["LANGCHAIN_PROJECT"] = "Simplified-ReAct-Bistro-Chatbot"
 
 # Initialize LLM
+# llm = HuggingFaceEndpoint(
+#     endpoint_url="https://api-inference.huggingface.co/models/mistralai/Mixtral-8x7B-Instruct-v0.1",
+#     huggingfacehub_api_token=hf_api_key,
+#     temperature=0.1,
+#     max_new_tokens=256,
+#     return_full_text=False
+# )
+#llm=Groq(api_key=groq_api_key)
+#client=Groq(api_key=groq_api_key)
+#llm=Groq(model="Mixtral-8x7B-Instruct-v0.1", api_key=groq_api_key, temperature=0.1, max_new_tokens=256, return_full_text=False) 
+#llm=ChatGroq(model="Mixtral-8x7B-Instruct-v0.1")
+#llm=ChatGroq(model="mixtral-8x7B-32768")
+#llm=ChatGroq(model="mistral-saba-24b")
+#llm=ChatGroq(model="llama3-8b-8192")
+#llm=ChatGroq(model="llama3-8b-8192", temperature=0.2)
 llm=ChatGroq(model="gemma2-9b-it", temperature=0.2)
 
 
@@ -90,8 +105,8 @@ def generate_response(state: State) -> State:
         4.4  Always proceed step-by-step as in Chain-of-thought while calculating the total.
     5. If they ask for a specific item, check if it's on the menu and add it to their order
     6. If they ask for a total, provide the current total cost of their order
-    7. If they ask to remove an item, remove it from their order and re-calculate the total using point 4 above
-    8. If they ask to change the quantity, update it in their order and re-calculate the total using point 4 above
+    7. If they ask to remove an item, remove it from their order
+    8. If they ask to change the quantity, update it in their order
     9. If they ask for a summary, provide a summary of their order and total cost
     10. If they ask for a specific item not on the menu, politely inform them it's not available
     11. If they dispute the order total, recheck the order total using point 4 above and confirm
@@ -105,7 +120,7 @@ def generate_response(state: State) -> State:
     
     Format the output as structured JSON according to these rules:
     F1. Always produce valid JSON and no other text
-    F2. Here is the output format instructions:
+    F2. Here is the format instructions:
     {format_instructions}
     F3. Do not include any other keys in the JSON response
     """
@@ -270,10 +285,9 @@ def show_sidebar():
         # Show current order summary in the sidebar
         st.subheader("Current Order")
         #order_dict = st.session_state.state["order"].model_dump()
-        #order_dict = st.session_state.state["order"]
-        order_dict = st.session_state.state["order"].model_dump() if st.session_state.state["order"] else {}
-        # if isinstance(order_dict, Order):
-        #     order_dict = order_dict.model_dump()
+        order_dict = st.session_state.state["order"]
+        if isinstance(order_dict, Order):
+            order_dict = order_dict.model_dump()
         if order_dict["items"]:
             for item in order_dict["items"]:
                 st.write(f"{item['quantity']}x {item['item']} - ${item['price'] * item['quantity']:.2f}")
