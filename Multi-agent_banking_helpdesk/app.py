@@ -1,18 +1,28 @@
 # --- File: app.py ---
 
-import streamlit as st
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 from langgraph.graph import StateGraph, node
 from instructor import patch
 from langchain_community.chat_models import ChatGroq
-from pydantic import BaseModel, Field
 import os
 
 from guideline_agent import guideline_agent
 from account_agent import account_agent
 from billing_agent import billing_agent
 
-st.set_page_config(page_title="Banking Virtual Assistant", layout="centered")
-st.title("🌐 Banking Virtual Assistant")
+# FastAPI setup
+app = FastAPI()
+
+# CORS for React frontend
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Shared state across LangGraph
 class AgentState(dict):
@@ -23,6 +33,8 @@ llm_raw = ChatGroq(model="llama3-8b-8192", temperature=0, groq_api_key=os.getenv
 llm = patch(llm_raw)
 
 # Routing schema using Instructor SDK
+from pydantic import Field
+
 class RoutingDecision(BaseModel):
     agent_name: str = Field(..., description="One of: 'guidelines', 'accounts', 'billing'")
     user_query: str = Field(..., description="Rewritten user query for the selected agent")
@@ -63,20 +75,13 @@ builder.add_node("orchestrator", orchestrator)
 builder.set_entry_point("orchestrator")
 graph = builder.compile()
 
-# Streamlit UI with chat history
-if "chat_history" not in st.session_state:
-    st.session_state.chat_history = []
+# FastAPI endpoint
+class UserQuery(BaseModel):
+    user_id: str
+    user_input: str
 
-user_id = st.text_input("Enter your user ID")
-user_input = st.text_area("Ask a banking-related question:")
-
-if st.button("Submit") and user_input:
-    state = {"user_input": user_input, "user_id": user_id}
+@app.post("/query")
+async def query_handler(request: UserQuery):
+    state = {"user_input": request.user_input, "user_id": request.user_id}
     result = graph.invoke(state)
-    st.session_state.chat_history.append((user_input, result["response"]))
-
-st.markdown("### Chat History")
-for i, (q, a) in enumerate(reversed(st.session_state.chat_history)):
-    st.markdown(f"**You:** {q}")
-    st.markdown(f"**Assistant:** {a}")
-    st.markdown("---")
+    return {"response": result["response"]}
