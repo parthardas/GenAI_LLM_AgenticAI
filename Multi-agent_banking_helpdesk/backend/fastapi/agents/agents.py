@@ -1,18 +1,29 @@
-# --- File 1: agents.py ---
-
+# --- File: agents.py ---
+import os
 from langchain.agents import initialize_agent, Tool
-from langchain.chat_models import ChatOpenAI
+from langchain_groq import ChatGroq
 from langchain.tools import tool
 from langchain.vectorstores import FAISS
 from langchain.embeddings import OpenAIEmbeddings
 from langchain.chains import RetrievalQA
 import sqlite3
 
-llm = ChatOpenAI(model_name="gpt-4", temperature=0)
+from dotenv import load_dotenv
+import os
 
+load_dotenv()
+
+lc_api_key = os.environ.get('LANGCHAIN_API_KEY')
+os.environ["LANGCHAIN_API_URL"] = "https://api.langchain.com/v1/graphql"
+os.environ["LANGCHAIN_TRACING_V2"] = "true"
+os.environ["LANGCHAIN_PROJECT"] = "multi-agent-assistant"
+
+groq_api_key = os.getenv("GROQ_API_KEY")
+llm = ChatGroq(model='llama-3.1-8b-instant', temperature=0)
 # === RAG Agent ===
 def build_rag_agent():
     vectorstore = FAISS.load_local("bank_docs", OpenAIEmbeddings())
+    #from langchain.embeddings import HuggingFaceEmbeddings
     retriever = vectorstore.as_retriever()
     rag_chain = RetrievalQA.from_chain_type(llm=llm, retriever=retriever)
 

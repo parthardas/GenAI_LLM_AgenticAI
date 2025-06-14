@@ -1,0 +1,40 @@
+/* App.css */
+
+.app {
+  font-family: Arial, sans-serif;
+  text-align: center;
+}
+
+.app-header {
+  background-color: #333;
+  color: #fff;
+  padding: 20px;
+  text-align: center;
+}
+
+.app-header h1 {
+  font-size: 24px;
+  margin-bottom: 10px;
+}
+
+.app-content {
+  padding: 20px;
+}
+
+.app-content p {
+  font-size: 18px;
+  margin-bottom: 20px;
+}
+
+.app-footer {
+  background-color: #333;
+  color: #fff;
+  padding: 10px;
+  text-align: center;
+  clear: both;
+}
+
+.app-footer p {
+  font-size: 14px;
+  margin-bottom: 10px;
+}

@@ -1,5 +1,6 @@
 // --- File: App.jsx ---
 import { useState } from "react";
+import './App.css';
 
 function App() {
   const [userId, setUserId] = useState("");
@@ -9,6 +10,7 @@ function App() {
   const submitQuery = async () => {
     const response = await fetch("http://localhost:8000/query", {
       method: "POST",
+      //method: "get",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ user_id: userId, user_input: input })
     });
