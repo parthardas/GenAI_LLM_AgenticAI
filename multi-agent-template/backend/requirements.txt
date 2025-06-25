@@ -1,0 +1,13 @@
+# backend/requirements.txt
+fastapi==0.104.1
+uvicorn==0.24.0
+pydantic==2.5.0
+instructor==0.4.5
+groq==0.4.1
+langgraph==0.0.62
+langchain==0.1.0
+langchain-core==0.1.0
+python-multipart==0.0.6
+httpx==0.25.2
+python-dotenv==1.0.0
+redis==5.0.1
