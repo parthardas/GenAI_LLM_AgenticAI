@@ -44,17 +44,16 @@ async def chat_endpoint(request: ChatRequest):
 
         #result = meta_agent.process_query(
         result = compiled_graph.invoke(initial_state, config={"recursion_limit": 5})
-        #{"response": result["response"]}
-        logger.info(f"Result response: {result.response}")
-        #logger.info(f"Result object type: {type(result)}")
-        #logger.info(f"Result object dir: {dir(result)}")
-        #logger.info(f"Result object dict: {getattr(result, '__dict__', str(result))}")
+
         
+        logger.info(f"Result response: {result["response"]}")
+  
+
         # Convert GraphState to dict for ChatResponse, or access attributes directly
         return ChatResponse(
-            user_input=result.user_input,
-            agent_call_count=result.agent_call_count,
-            conversation_history=result.conversation_history
+            #user_input=result["user_input"],
+            response=result["response"],
+
         )
         
     except Exception as e:

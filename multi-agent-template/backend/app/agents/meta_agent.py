@@ -42,29 +42,39 @@ class AgentRoutingDecision(BaseModel):
     agent_name: str = Field(..., description="Name of the sub-agent to route to.")
 
 #@node
-def router_node(state: GraphState) -> dict:
+def router_node(state: GraphState) -> GraphState:
     """
-    Routes the user input to the appropriate sub-agent based on the decision made by a language model.
+    Routes the current state to the appropriate agent node based on user input and LLM decision.
+    This function inspects the provided `state` (which can be a dict, an object with attributes, or a string),
+    extracts the user input, and determines if the conversation is complete. If not complete, it uses a language
+    model (LLM) to decide which sub-agent ("agent_a", "agent_b", or "agent_c") should handle the next step,
+    based on the user's input. The decision is validated and the state is updated accordingly.
     Args:
-        state (GraphState): The current state containing user input and other relevant information.
+        state (GraphState): The current state of the conversation or workflow. Can be a dict, an object, or a string.
     Returns:
-        dict: A dictionary containing the selected agent's name under the key "route_to" and the original user input under "user_input".
+        GraphState: The updated state with routing information, or a dict indicating the end of the workflow.
     Raises:
-        ValueError: If the language model selects an invalid agent name.
-    Logs:
-        - The initial state and user input.
-        - The decision made by the language model.
-        - The agent selected for routing.
+        ValueError: If the LLM returns an invalid agent name not in {"agent_a", "agent_b", "agent_c"}.
     """
+    # If state is a string, convert it to a GraphState object with all its attributes
+    if isinstance(state, dict):
+        state = GraphState(**state)
+    elif isinstance(state, str):
+        # If state is a string, create a GraphState object with user_input set to the string
+        state = GraphState(user_input=state)
+    elif not isinstance(state, GraphState):
+        # If state is not a dict or string, assume it's a GraphState object
+        state = GraphState(**state.__dict__)
+
+    logger.info(f"In router_node 1: state type: {type(state)}")
 
     logger.info(f"In router_node: {state}")
 
-    user_input = state.user_input
+  
+    if state.done:
+        #return {"route_to": "END", "user_input": state.user_input}
+        return state
 
-    # Safely check if "done" is present and True in the state
-    #state.user_input if hasattr(state, "user_input")
-    if (hasattr(state, "done") and state.done) or (isinstance(state, dict) and state.get("done")):
-        return {"route_to": "END", "user_input": state.user_input}
 
     # if getatstr(state, "done", False) or state.get("done", False):
     #     return {"route_to": "END", "user_input": state.user_input}
@@ -79,8 +89,9 @@ def router_node(state: GraphState) -> dict:
         "Based on the following user input, decide which agent to use.\n"
         "Output will be strictly in this JSON format: {\"agent_name\": \"<chosen string as per above instruction>\"}\n"
         "Example: {\"agent_name\": \"agent_b\"}\n"
-        f"Input: {user_input}\n"
+        f"Input: {state.user_input}\n"
     )
+
     llm_response = llm.invoke(prompt)
     # Parse the LLM response using the output parser
     if hasattr(llm_response, "content"):
@@ -95,8 +106,14 @@ def router_node(state: GraphState) -> dict:
     if decision.agent_name not in valid_agents:
         raise ValueError(f"Invalid agent selected: {decision.agent_name}")
     
-    # Log the decision
-    logger.info(f"In router_node: before router return: {decision.agent_name}")
+    #print the type of the state object
+    logger.info(f"In router_node 2: state type: {type(state)}")
 
-    return {"route_to": decision.agent_name, "user_input": user_input}
-    #return decision.agent_name
+    # Update the state with the routing decision
+    state.route_to = decision.agent_name
+    state.done = False
+
+    # Log the decision
+    logger.info(f"In router_node: before router return: {state}")
+    
+    return state

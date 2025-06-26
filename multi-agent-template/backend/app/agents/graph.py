@@ -50,7 +50,7 @@ graph.set_entry_point("router")
 
 graph.add_conditional_edges(
     "router",
-    lambda state: router_node(state)["route_to"],
+    lambda state: state.route_to,
     {
         "agent_a": "agent_a",
         "agent_b": "agent_b",

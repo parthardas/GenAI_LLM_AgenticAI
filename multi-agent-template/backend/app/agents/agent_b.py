@@ -80,14 +80,29 @@ def tool_two(tool_input: InputSchema) -> OutputSchema:
 # )
 
 # LangGraph node for agent_b
-def agent_b_node(state):
+def agent_b_node(state:GraphState) -> GraphState:
     """
-    LangGraph node for agent_b.
-    Routes to tool_one or tool_two based on keywords in user_input.
+    Processes the given state for agent B, determines which tool to invoke based on user input,
+    and updates the state with the response and completion status.
+    Args:
+        state (GraphState or dict): The current state object, which must contain a 'user_input' attribute or key.
+    Returns:
+        GraphState or dict: The updated state object with the following modifications:
+            - 'response': The result from the selected tool or an instruction message.
+            - 'user_input': The original user input.
+            - 'done': Boolean flag set to True indicating completion.
+    Behavior:
+        - If 'tool 1' is mentioned in the user input, invokes tool_one with the input.
+        - If 'tool 2' is mentioned, invokes tool_two with the input.
+        - Otherwise, prompts the user to specify a tool.
+        - Handles both attribute-style and dict-style state objects.
+        - Logs key steps for debugging.
     """
 
+
     logger.info(f"inside agent_b_node: {state}")
-    user_input = state.user_input if hasattr(state, "user_input") else state["user_input"]
+    #user_input = state.user_input if hasattr(state, "user_input") else state["user_input"]
+    user_input = state.user_input
     if "tool 1" in user_input.lower():
         tool_one_input = InputSchema(data=user_input)
         tool_result = tool_one(tool_input=tool_one_input)
@@ -98,24 +113,14 @@ def agent_b_node(state):
     else:
         response = "Please specify 'tool 1' or 'tool 2' in your input for agent B."
     
-    #return the state object by adding a done key set to True
-    logger.info(f"agent_b_node response: {state}")
-    if hasattr(state, "done"):
-        state.done = True
-    else:
-        state["done"] = True
-    # Return the response in the expected format
+
+
+    state.done = True
+    state.route_to = "END"
+    state.response = response
     logger.info(f"agent_b_node returning: {state}")
-    if isinstance(state, GraphState):
-        state.response = response
-        state.user_input = user_input
-        return state
-    # If state is a dict, return a new dict with the response
-    logger.info(f"agent_b_node returning as dict: {state}")
-    if isinstance(state, dict):
-        state["response"] = response
-        state["user_input"] = user_input
-        return state
+    return state
+    
     # return {
     #     "user_input": user_input,
     #     "response": response,

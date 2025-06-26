@@ -43,6 +43,7 @@ class GraphState(BaseModel):
     conversation_history: List[Dict] = []
     done: Optional[bool] = False
     response: Optional[str] = None
+    route_to: Optional[str] = None
 
 class ChatRequest(BaseModel):
     message: str
@@ -50,6 +51,6 @@ class ChatRequest(BaseModel):
 
 class ChatResponse(BaseModel):
     response: str
-    conversation_id: str
+    conversation_id: Optional[str] = None
     reasoning_steps: Optional[List[str]] = None
     calculations: Optional[List[ArithmeticOutput]] = None
