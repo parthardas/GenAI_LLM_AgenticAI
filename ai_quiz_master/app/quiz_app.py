@@ -7,8 +7,8 @@ import re
 
 load_dotenv()
 
-st.set_page_config(page_title="A Third Grader Math Tutor – Powered by LLaMA3", page_icon="🧠")
-st.title("🧠 Third Grader Math Quiz – Powered by LLaMA3 + Groq")
+st.set_page_config(page_title="A Third Grader Math Tutor – Powered by LLaMA3", page_icon=":books:", layout="wide")
+st.title("Third Grader Math Quiz – Powered by LLaMA3")
 
 # Initialize session state variables
 if "next_question" not in st.session_state:
@@ -32,7 +32,7 @@ llm = ChatGroq(model="llama-3.1-8b-instant", temperature=0)
 def generate_mcq(previous_questions):
     history_text = "\n".join(f"- {q}" for q in previous_questions if q)
     prompt = f"""You are a Third Grader Math quiz master. Generate a multiple-choice question (MCQ) to test a third grader's knowledge assuming that the candidate is at an intermediate level. 
-Do NOT repeat any of the previous questions. If you repeat, you will lose points.Here are the previous questions:
+Randomize the order of the questions including the first question. Do NOT repeat any of the previous questions. If you repeat, you will lose points.Here are the previous questions:
 {history_text}
 
 Format it exactly like this:
