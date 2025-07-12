@@ -7,8 +7,8 @@ import re
 
 load_dotenv()
 
-st.set_page_config(page_title="A Third Grader Math Tutor – Powered by LLaMA3", page_icon=":books:", layout="wide")
-st.title("Third Grader Math Quiz – Powered by LLaMA3")
+st.set_page_config(page_title="A Third Grader ELA Tutor – Powered by LLaMA3", page_icon=":books:", layout="wide")
+st.title("Third Grader ELA Quiz – Powered by LLaMA3")
 
 # Initialize session state variables
 if "next_question" not in st.session_state:
@@ -16,9 +16,9 @@ if "next_question" not in st.session_state:
         st.session_state.next_question = False
         st.session_state.init = True
 
-if "score" not in st.session_state:
+if "score" not in st.session_state or not hasattr(st.session_state, "score"):
     st.session_state.score = 0
-if "q_count" not in st.session_state:
+if "q_count" not in st.session_state or not hasattr(st.session_state, "q_count"):
     st.session_state.q_count = 0
 
 if "previous_questions" not in st.session_state:
@@ -26,13 +26,13 @@ if "previous_questions" not in st.session_state:
         st.session_state.previous_questions = set()
 
 groq_api_key = os.getenv("GROQ_API_KEY")
-llm = ChatGroq(model="llama-3.1-8b-instant", temperature=0)
+llm = ChatGroq(model="llama-3.1-8b-instant", temperature=0.3)
 
 
 def generate_mcq(previous_questions):
     history_text = "\n".join(f"- {q}" for q in previous_questions if q)
-    prompt = f"""You are a Third Grader Math quiz master. Generate a multiple-choice question (MCQ) to test a third grader's knowledge assuming that the candidate is at an intermediate level. 
-Randomize the order of the questions including the first question. Do NOT repeat any of the previous questions. If you repeat, you will lose points.Here are the previous questions:
+    prompt = f"""You are a Third Grader ELA quiz master. Generate a multiple-choice question (MCQ) to test a third grader's knowledge assuming that the candidate is at an intermediate level. 
+Randomize the order of the questions including the first question. DO NOT generate more than one question at a time and DO NOT repeat any of the previous questions. If you repeat, you will lose points.Here are the previous questions:
 {history_text}
 
 Format it exactly like this:
@@ -84,7 +84,8 @@ if st.session_state.next_question == True or st.session_state.init == True:
 # Unpack the current MCQ
 q, options, correct, explanation = st.session_state.current_mcq
 
-st.markdown(f"**Q{st.session_state.q_count + 1}:** {q}")
+st.markdown(f"**Q{st.session_state.q_count+1}:** {q}")
+#st.session_state.submitted = False
 user_answer = st.radio(
     "Choose your answer:",
     list(options.keys()),
@@ -95,15 +96,19 @@ user_answer = st.radio(
 
 if st.button("Submit Answer"):
     st.session_state.q_count += 1
+    #st.session_state.submitted = True
 
     selected_answer = st.session_state.user_answer_radio
     st.session_state.selected_answer = selected_answer
     st.session_state.show_explanation = True
 
+#if st.session_state.get("show_explanation") or st.session_state.get("submitted"):
+
 if st.session_state.get("show_explanation"):
     selected_answer = st.session_state.selected_answer
     if selected_answer == correct:
         st.success("✅ Correct!")
+        st.session_state.score += 1
     else:
         st.error(f"❌ Incorrect. Correct answer is {correct}.")
     st.markdown(f"**Explanation:** {explanation}")
