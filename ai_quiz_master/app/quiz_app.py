@@ -108,7 +108,9 @@ if st.session_state.get("show_explanation"):
     selected_answer = st.session_state.selected_answer
     if selected_answer == correct:
         st.success("✅ Correct!")
-        st.session_state.score += 1
+        if not st.session_state.get("score_updated", False):
+            st.session_state.score += 1
+            st.session_state.score_updated = True
     else:
         st.error(f"❌ Incorrect. Correct answer is {correct}.")
     st.markdown(f"**Explanation:** {explanation}")
@@ -117,6 +119,7 @@ if st.session_state.get("show_explanation"):
     if st.button("Next Question"):
         st.session_state.next_question = True
         st.session_state.show_explanation = False
+        st.session_state.score_updated = False  # Reset for next question   
         st.rerun()
 
 
