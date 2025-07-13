@@ -1,6 +1,7 @@
 import streamlit as st
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_groq import ChatGroq
+from pydantic import SecretStr
 import os
 from dotenv import load_dotenv
 import re
@@ -25,7 +26,11 @@ if "previous_questions" not in st.session_state:
     if not hasattr(st.session_state, "previous_questions"):
         st.session_state.previous_questions = set()
 
-groq_api_key = os.getenv("GROQ_API_KEY")
+#groq_api_key = os.getenv("GROQ_API_KEY")
+
+groq_api_key = os.environ["GROQ_API_KEY"]
+#print(f"GROQ_API_KEY: {groq_api_key}")
+#groq_api_key_secret = SecretStr(groq_api_key) if groq_api_key else None
 llm = ChatGroq(model="llama-3.1-8b-instant", temperature=0.3)
 
 
