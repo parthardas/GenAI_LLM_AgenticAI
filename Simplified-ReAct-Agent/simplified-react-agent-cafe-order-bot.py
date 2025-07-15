@@ -1,46 +1,36 @@
+import os
+
+# Set the cache directory to something writable
+os.environ["HF_HOME"] = "tmp/huggingface"
+os.environ["HF_DATASETS_CACHE"] = "tmp/huggingface/datasets"
+os.environ["HUGGINGFACE_HUB_CACHE"] = "tmp/huggingface/hub"
+os.environ["XDG_CACHE_HOME"] = "tmp/huggingface"
+os.makedirs("tmp/huggingface", exist_ok=True)
+
 import streamlit as st
 from typing import TypedDict, List, Dict, Literal
 from langgraph.graph import END, StateGraph
 from pydantic import BaseModel, Field
 from datetime import datetime
-import os
+
 from dotenv import load_dotenv
 import json
 from langchain.output_parsers import PydanticOutputParser
 from langchain.prompts import PromptTemplate
-#from langchain_community.llms import HuggingFaceEndpoint
-#from groq import Groq
 from langchain_groq import ChatGroq
-import re
-
-#from langchain_community.llms import Groq
+from langchain_core.messages import SystemMessage, HumanMessage
 
 # Load environment variables
 load_dotenv()
-#hf_api_key = os.environ['HUGGINGFACEHUB_API_TOKEN']
-groq_api_key = os.environ['GROQ_API_KEY']
+hf_api_key = os.environ['HUGGINGFACEHUB_API_TOKEN']
 os.environ["LANGCHAIN_API_KEY"] = os.environ.get('LANGCHAIN_API_KEY')
 os.environ["LANGCHAIN_API_URL"] = "https://api.langchain.com/v1/graphql"
 os.environ["LANGCHAIN_TRACING_V2"] = "true"
 os.environ["LANGCHAIN_PROJECT"] = "Simplified-ReAct-Bistro-Chatbot"
 
-# Initialize LLM
-# llm = HuggingFaceEndpoint(
-#     endpoint_url="https://api-inference.huggingface.co/models/mistralai/Mixtral-8x7B-Instruct-v0.1",
-#     huggingfacehub_api_token=hf_api_key,
-#     temperature=0.1,
-#     max_new_tokens=256,
-#     return_full_text=False
-# )
-#llm=Groq(api_key=groq_api_key)
-#client=Groq(api_key=groq_api_key)
-#llm=Groq(model="Mixtral-8x7B-Instruct-v0.1", api_key=groq_api_key, temperature=0.1, max_new_tokens=256, return_full_text=False) 
-#llm=ChatGroq(model="Mixtral-8x7B-Instruct-v0.1")
-#llm=ChatGroq(model="mixtral-8x7B-32768")
-#llm=ChatGroq(model="mistral-saba-24b")
-#llm=ChatGroq(model="llama3-8b-8192")
-#llm=ChatGroq(model="llama3-8b-8192", temperature=0.2)
-llm=ChatGroq(model="gemma2-9b-it", temperature=0.2)
+os.environ["HUGGINGFACE_TOKEN"] = hf_api_key
+
+llm=ChatGroq(model="llama-3.1-8b-instant", temperature=0.2)
 
 
 # Define our order item structure
@@ -81,7 +71,7 @@ class State(TypedDict):
 def generate_response(state: State) -> State:
     # Construct the prompt based on conversation history and current state
     system_prompt = """
-    You are an ordering assistant for a restaurant. Be friendly, concise, and helpful.
+    <s>[INST] You are an ordering assistant for a restaurant. Be friendly, concise, and helpful.
     
     MENU:
     - Burger: $5.99
@@ -105,8 +95,8 @@ def generate_response(state: State) -> State:
         4.4  Always proceed step-by-step as in Chain-of-thought while calculating the total.
     5. If they ask for a specific item, check if it's on the menu and add it to their order
     6. If they ask for a total, provide the current total cost of their order
-    7. If they ask to remove an item, remove it from their order
-    8. If they ask to change the quantity, update it in their order
+    7. If they ask to remove an item, remove it from their order and re-calculate the total using point 4 above
+    8. If they ask to change the quantity, update it in their order and re-calculate the total using point 4 above
     9. If they ask for a summary, provide a summary of their order and total cost
     10. If they ask for a specific item not on the menu, politely inform them it's not available
     11. If they dispute the order total, recheck the order total using point 4 above and confirm
@@ -120,9 +110,10 @@ def generate_response(state: State) -> State:
     
     Format the output as structured JSON according to these rules:
     F1. Always produce valid JSON and no other text
-    F2. Here is the format instructions:
+    F2. Here is the output format instructions:
     {format_instructions}
     F3. Do not include any other keys in the JSON response
+    [/INST]
     """
     
     # Get the chat history for context
@@ -135,76 +126,39 @@ def generate_response(state: State) -> State:
     # Get the user message from state
     user_message = state["user_input"]
     
-    # Construct the prompt for the LLM
-    user_prompt = f"""
-    Chat History:
-    {chat_history}
-    
-    Current User Message: {user_message}
-    
-    Respond according to the instructions.
-    """
-    
     # Output parser for Pydantic model
     parser = PydanticOutputParser(pydantic_object=LLM_Response)
-    
-    prompt = PromptTemplate(
-        template=system_prompt + "\n" + user_prompt,
-        input_variables=["order", "step"],
-        partial_variables={
-            "format_instructions": parser.get_format_instructions(),
-            "order": state["order"],
-            "step": state["current_step"]
-        }
+
+    # Format instructions
+    format_instructions = parser.get_format_instructions()
+
+    # Fill in system prompt variables
+    filled_system_prompt = system_prompt.format(
+        order=state["order"],
+        step=state["current_step"],
+        format_instructions=format_instructions
     )
 
-    # Generate the prompt
-    _input = prompt.format_prompt()
-    #response = llm(_input.to_string())
-    response = llm.invoke(_input.to_string())
+    # Separate system and user messages prevent prompt injection
+    # Prepare messages for the LLM
+    messages = [
+        SystemMessage(content=filled_system_prompt),
+        HumanMessage(content=f"Chat History:\n{chat_history}\n\nCurrent User Message: {user_message}")
+    ]
+
+    response = llm.invoke(messages)
     
     # Parse the output
     try:
-        parsed_output = parser.parse(response)
+        parsed_output = parser.parse(response if isinstance(response, str) else response.content)
         state["order"] = parsed_output.order
         state["history"].append({"role": "assistant", "content": parsed_output.response})
         state["current_step"] = parsed_output.next_step
     except Exception as e:
         print(f"Error parsing output: {e}")
         print(f"Raw response: {response}")
-        #return None
-        # Try to extract JSON from the response using regex
-        try:
-            # Find JSON-like structure in the text
-            #json_match = re.search(r'\{.*\}', response)
-            #json_match = re.search(r'```json\n(\{.*?\})\n```', str(response), re.DOTALL)
-            json_match = re.search(r'(```json\n\{).*(\}\n```)', str(response), re.DOTALL)
-            #json_match = re.search(r'\{.*\}', str(response), re.DOTALL)
-            if json_match:
-                json_str = json_match.group(1)
-                print(f"Extracted JSON string: {json_str}")
-                # Parse the JSON string
-                parsed_json = json.loads(json_str)
-                print(f"Extracted JSON: {parsed_json}")
-
-                # Populate state with extracted JSON
-                if "order" in parsed_json:
-                    state["order"] = parsed_json["order"]
-                if "response" in parsed_json:
-                    state["history"].append({"role": "assistant", "content": parsed_json["response"]})
-                if "next_step" in parsed_json:
-                    state["current_step"] = parsed_json["next_step"]
-                
-                return state
-            
-        except Exception as json_error:
-            print(f"Error extracting JSON: {json_error}")
-            # If JSON extraction fails, create a basic response
-            state["history"].append({
-                "role": "assistant", 
-                "content": "I apologize, but I couldn't process that correctly. Could you please rephrase your request?"
-            })
-            #state["current_step"] = "order_taking"
+        return None
+    
     return state
 
 # Function to process user input
@@ -215,17 +169,27 @@ def process_user_input(state: State) -> State:
 
 # Function to fulfill the order (call external service)
 def fulfill_order(state: State) -> State:
-    # This is where you would make an API call to an order fulfillment service
-    # For demonstration purposes, we'll just log the order
+    """
+    This function takes the current state and fulfills the order by generating an
+    order ID and logging the order details. In a real app, this would make an API
+    call to an order fulfillment service.
+
+    Args:
+        state (State): The current state of the chatbot
+
+    Returns:
+        State: The new state of the chatbot after fulfilling the order
+    """
+    order_obj = state["order"]
     order_data = {
         "order_id": f"ORD-{datetime.now().strftime('%Y%m%d%H%M%S')}",
-        "items": state["order"]["items"],
-        "total": state["order"]["total"],
+        "items": order_obj.items,
+        "total": order_obj.total,
         "timestamp": datetime.now().isoformat()
     }
     
     # Log the order (in a real app, you'd send this to your backend)
-    print(f"Order placed: {json.dumps(order_data, indent=2)}")
+    print(f"Order placed: {order_data}")
     
     # Add a system message to the history
     state["history"].append({
@@ -234,7 +198,7 @@ def fulfill_order(state: State) -> State:
     })
     
     # Reset the state for a new order
-    state["order"] = Order().model_dump()
+    state["order"] = order_data
     state["current_step"] = "order_taking"
     
     return state
@@ -254,10 +218,8 @@ def create_workflow():
     workflow.add_node("process_input", process_user_input)
     workflow.add_node("generate_response", generate_response)
     workflow.add_node("fulfill_order", fulfill_order)
-    
     # Add the edges to the graph
     workflow.add_edge("process_input", "generate_response")
-    
     # Conditional edge from generate_response
     workflow.add_conditional_edges(
         "generate_response",
@@ -279,18 +241,22 @@ def create_workflow():
 # Compile the graph
 order_graph = create_workflow().compile()
 
-#function for showing side bar
 def show_sidebar():
     with st.sidebar:
         # Show current order summary in the sidebar
         st.subheader("Current Order")
-        #order_dict = st.session_state.state["order"].model_dump()
-        order_dict = st.session_state.state["order"]
-        if isinstance(order_dict, Order):
-            order_dict = order_dict.model_dump()
+
+        order_obj = st.session_state.state["order"]
+        # If it's a dict, use as is; if it's an Order object, convert to dict
+        if hasattr(order_obj, "model_dump"):
+            order_dict = order_obj.model_dump()
+        else:
+            order_dict = order_obj
+
         if order_dict["items"]:
             for item in order_dict["items"]:
-                st.write(f"{item['quantity']}x {item['item']} - ${item['price'] * item['quantity']:.2f}")
+                item_dict = item.model_dump() if hasattr(item, "model_dump") else item
+                st.write(f"{item_dict['quantity']}x {item_dict['item']} - ${item_dict['price'] * item_dict['quantity']:.2f}")
             st.write(f"**Total: ${order_dict['total']:.2f}**")
         else:
             st.write("Your order is empty")
@@ -330,13 +296,10 @@ def main():
             st.session_state.started = True
             initial_state = st.session_state.state
             initial_state["user_input"] = "Hello, I'd like to place an order"
-
             result = order_graph.invoke(initial_state)
             st.session_state.state = result
-            print(result)
-            #assistant_response = result["history"][-1]["content"]
-            assistant_response = result["response"]
-            
+            last_message = result["history"][-1]
+            assistant_response = last_message["content"] if isinstance(last_message, dict) and "content" in last_message else last_message
             st.session_state.messages.append({"role": "user", "content": "Hello, I'd like to place an order"})
             st.session_state.messages.append({"role": "assistant", "content": assistant_response})
             st.rerun()
@@ -353,9 +316,7 @@ def main():
             result = order_graph.invoke(current_state)
             st.session_state.state = result
             
-            #assistant_response = result["history"][-1]["content"] if result["history"] else "I couldn't process your order. Please try again."
-            assistant_response = result["response"] if result["response"] else "I couldn't process your order. Please try again."
-            
+            assistant_response = result["history"][-1]["content"] if result["history"] else "I couldn't process your order. Please try again."
             st.session_state.messages.append({"role": "assistant", "content": assistant_response})
             
             with st.chat_message("assistant"):
