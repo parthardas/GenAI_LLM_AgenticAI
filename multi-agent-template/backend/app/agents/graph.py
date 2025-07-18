@@ -1,15 +1,17 @@
 from langgraph.graph import StateGraph, END
 from .meta_agent import router_node
 from app.models.schemas import GraphState
-from .agent_a import agent_a
+#from .agent_a import agent_a
+from .agent_a import agent_a_node
 from .agent_b import agent_b_node
-from .agent_c import agent_c
+#from .agent_c import agent_c
+from .agent_c import agent_c_node
 
 # Wrapper functions for LangChain agents
 # def agent_a_node(state): return {"user_input": state["user_input"], "response": agent_a.invoke({"input": state["user_input"]})}
 # def agent_b_node(state): return {"user_input": state["user_input"], "response": agent_b.invoke({"input": state["user_input"]})}
 # def agent_c_node(state): return {"user_input": state["user_input"], "response": agent_c.invoke({"input": state["user_input"]})}
-def agent_a_node(state): return {"user_input": state.user_input, "response": agent_a.invoke({"input": state.user_input})}
+#def agent_a_node(state): return {"user_input": state.user_input, "response": agent_a.invoke({"input": state.user_input})}
 
 # def agent_b_node(state): 
 #     import logging
@@ -21,7 +23,7 @@ def agent_a_node(state): return {"user_input": state.user_input, "response": age
 #     logger.info(f"In agent_b_node: state: {state}")
 #     return {"user_input": state.user_input, "response": agent_b.invoke({"input": state.user_input})}
 
-def agent_c_node(state): return {"user_input": state.user_input, "response": agent_c.invoke({"input": state.user_input})}
+#def agent_c_node(state): return {"user_input": state.user_input, "response": agent_c.invoke({"input": state.user_input})}
 
 
 # Create the graph
