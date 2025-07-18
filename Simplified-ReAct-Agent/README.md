@@ -21,7 +21,7 @@ Otehr details are as follows:
 - Python 3.10
 - Streamlit
 - LangGraph
-- Mistral on HuggingFace
+- Mistral on HuggingFace (Note: 07/15/2025: Mistral on HuggingFace has been replaced with Llama3 on Groq due to the HuggingFaceEndpoint throwing HTTP 404 for multiple models including Mistral and Llama3.)
 - Pydantic
 - Docker
 
