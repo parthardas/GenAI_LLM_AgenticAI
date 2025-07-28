@@ -1,11 +1,11 @@
 import os
 
 # Set the cache directory to something writable
-os.environ["HF_HOME"] = "tmp/huggingface"
-os.environ["HF_DATASETS_CACHE"] = "tmp/huggingface/datasets"
-os.environ["HUGGINGFACE_HUB_CACHE"] = "tmp/huggingface/hub"
-os.environ["XDG_CACHE_HOME"] = "tmp/huggingface"
-os.makedirs("tmp/huggingface", exist_ok=True)
+# os.environ["HF_HOME"] = "/tmp/huggingface"
+# os.environ["HF_DATASETS_CACHE"] = "/tmp/huggingface/datasets"
+# os.environ["HUGGINGFACE_HUB_CACHE"] = "/tmp/huggingface/hub"
+# os.environ["XDG_CACHE_HOME"] = "/tmp/huggingface"
+# os.makedirs("/tmp/huggingface", exist_ok=True)
 
 import streamlit as st
 from typing import TypedDict, List, Dict, Literal
@@ -14,9 +14,9 @@ from pydantic import BaseModel, Field
 from datetime import datetime
 
 from dotenv import load_dotenv
-import json
+#import json
 from langchain.output_parsers import PydanticOutputParser
-from langchain.prompts import PromptTemplate
+#from langchain.prompts import PromptTemplate
 from langchain_groq import ChatGroq
 from langchain_core.messages import SystemMessage, HumanMessage
 
@@ -66,6 +66,34 @@ class State(TypedDict):
     history: List[Dict[str, str]]
     current_step: Literal["order_taking", "confirm"]
     user_input: str  # Adding user_input to the state
+
+
+# order total independent validator
+def calculate_order_total(order: Order) -> float:
+    """
+    Independently calculates the total cost of an order by performing arithmetic
+    on the order items
+    Args:
+        order (Order): Order object containing list of OrderItem objects with
+                      item name, quantity, and price per item
+    
+    Returns:
+        float: The independently calculated total cost rounded to 2 decimal places
+    """
+    
+    # Initialize total to zero
+    calculated_total = 0.0
+    
+    # Iterate through each item in the order
+    for item in order.items:
+        # Calculate line total: quantity × price per item
+        line_total = item.quantity * item.price
+        
+        # Add to running total
+        calculated_total += line_total
+    
+    # Round to 2 decimal places to handle floating point precision
+    return round(calculated_total, 2)
 
 # Function to generate LLM response based on the current state
 def generate_response(state: State) -> State:
@@ -151,7 +179,12 @@ def generate_response(state: State) -> State:
     # Parse the output
     try:
         parsed_output = parser.parse(response if isinstance(response, str) else response.content)
-        state["order"] = parsed_output.order
+        received_order=parsed_output.order
+        calculated_total=calculate_order_total(received_order)
+        received_order.total = calculated_total
+        # Update the state with the new order and responses
+        state["order"] = received_order
+        
         state["history"].append({"role": "assistant", "content": parsed_output.response})
         state["current_step"] = parsed_output.next_step
     except Exception as e:
