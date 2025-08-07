@@ -115,12 +115,8 @@ def generate_response(state: State) -> State:
     If in order_taking step:
     1. Greet the user if this is the start of the conversation
     2. Help users select items, modify quantities, or remove items
-    3. Keep track of their order and the total
-    4. Follow the following set of instructions for calculating the total:
-        4.1. Do the first attempt at total calculation by calculating it as sum of (item_price * item_quantity) for each item
-        4.2. As the second attempt, calculate another value of the total by adding ALL the ordered items' prices one by one without grouping them
-        4.3. If the two answers differ, you identify and correct the mistake before responding.
-        4.4  Always proceed step-by-step as in Chain-of-thought while calculating the total.
+    3. Keep track of their order and the total for the order.
+    4. Use the independent function to calculate the total but don't mention the total in the conversation. If they ask tell them to see the left side panel for the total.
     5. If they ask for a specific item, check if it's on the menu and add it to their order
     6. If they ask for a total, provide the current total cost of their order
     7. If they ask to remove an item, remove it from their order and re-calculate the total using point 4 above
@@ -180,6 +176,9 @@ def generate_response(state: State) -> State:
     try:
         parsed_output = parser.parse(response if isinstance(response, str) else response.content)
         received_order=parsed_output.order
+        # Calculate the total using the independent function
+        if not isinstance(received_order, Order):
+            received_order = Order.model_validate(received_order)
         calculated_total=calculate_order_total(received_order)
         received_order.total = calculated_total
         # Update the state with the new order and responses
