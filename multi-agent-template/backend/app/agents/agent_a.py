@@ -223,7 +223,7 @@ def llm_tool_decision(user_input: str) -> ToolDecision:
             decision['website'] = line.replace('Website:', '').strip()
     
     # Default values if parsing fails
-    tool_name = decision.get('tool_name', 'tool_one')
+    tool_name = decision.get('tool_name', 'tool_three')
     reasoning = decision.get('reasoning', 'Default reasoning: Unable to parse LLM response properly')
     extracted_data = decision.get('extracted_data', user_input)
     website = decision.get('website', 'wikipedia.org')
