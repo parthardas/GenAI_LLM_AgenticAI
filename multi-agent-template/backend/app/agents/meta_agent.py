@@ -4,7 +4,7 @@ from langgraph.graph import StateGraph
 from pydantic import BaseModel, Field
 #from instructor import Instructor as InstructorOpenAI
 from langchain_groq import ChatGroq
-from app.models.schemas import GraphState
+from models.schemas import GraphState
 #from groq import Groq
 import os
 
@@ -86,7 +86,7 @@ def router_node(state: GraphState) -> GraphState:
         "Remember: You are not a coder here and are not outputing code, but just giving the desired output as per the below logic.\n"
         "If the user asks for agent A then return \"agent_a\".\n"
         "Similarly for agent B or Agent C, return \"agent_b\" and \"agent_c\" respectively.\n"
-        "Based on the following user input, decide which agent to use.\n"
+        "Based on the user input, decide which agent to use.\n"
         "Output will be strictly in this JSON format: {\"agent_name\": \"<chosen string as per above instruction>\"}\n"
         "Example: {\"agent_name\": \"agent_b\"}\n"
         f"Input: {state.user_input}\n"

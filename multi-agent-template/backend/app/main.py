@@ -2,10 +2,10 @@
 from fastapi import FastAPI, HTTPException
 from langgraph.graph import StateGraph, END
 from fastapi.middleware.cors import CORSMiddleware
-from .models.schemas import ChatRequest, ChatResponse
+from models.schemas import ChatRequest, ChatResponse
 #from app.agents.meta_agent import MetaAgent
-from .agents.graph import compiled_graph
-from .models.schemas import GraphState
+from agents.graph import compiled_graph
+from models.schemas import GraphState
 import logging
 import uvicorn
 
@@ -45,9 +45,8 @@ async def chat_endpoint(request: ChatRequest):
         #result = meta_agent.process_query(
         result = compiled_graph.invoke(initial_state, config={"recursion_limit": 5})
 
-        
-        logger.info(f"Result response: {result["response"]}")
-  
+
+        logger.info(f"Result response: {result['response']}")
 
         # Convert GraphState to dict for ChatResponse, or access attributes directly
         return ChatResponse(

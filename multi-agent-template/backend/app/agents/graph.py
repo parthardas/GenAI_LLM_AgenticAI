@@ -1,6 +1,6 @@
 from langgraph.graph import StateGraph, END
 from .meta_agent import router_node
-from app.models.schemas import GraphState
+from models.schemas import GraphState
 #from .agent_a import agent_a
 from .agent_a import agent_a_node
 from .agent_b import agent_b_node

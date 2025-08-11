@@ -5,7 +5,7 @@ from langgraph.prebuilt import create_react_agent
 from langchain.agents import tool
 #from instructor import Instructor as InstructorOpenAI
 from langchain_groq import ChatGroq
-from app.models.schemas import GraphState
+from models.schemas import GraphState
 import os
 
 # Load environment variables

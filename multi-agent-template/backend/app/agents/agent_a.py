@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 from langchain.agents import tool
 #from instructor import Instructor as InstructorOpenAI
 from langchain_groq import ChatGroq
-from app.models.schemas import GraphState
+from models.schemas import GraphState
 import os
 
 # Load environment variables
@@ -161,6 +161,79 @@ def tool_three(tool_input: SearchInputSchema) -> SearchOutputSchema:
 # )
 
 #agent_a = create_react_agent(llm, tools=[tool_one, tool_two], debug=True, response_format="OutputSchema")
+
+class ToolDecision(BaseModel):
+    tool_name: str = Field(..., description="The name of the selected tool: 'tool_one', 'tool_two', or 'tool_three'")
+    reasoning: str = Field(..., description="The reasoning behind selecting this particular tool")
+    extracted_data: str = Field(..., description="The input data extracted for the tool")
+    website: str = Field(default="", description="The website to search on (only for tool_three)")
+
+def llm_tool_decision(user_input: str) -> ToolDecision:
+    """
+    Uses the LLM to decide which tool to use based on the user input.
+    
+    Args:
+        user_input (str): The user's request
+        
+    Returns:
+        ToolDecision: Contains the selected tool name, reasoning, and extracted parameters
+    """
+    # Prepare the prompt for tool selection
+    tool_descriptions = """
+    Available tools:
+    1. tool_one: Processes simple text data with Agent A's first tool
+    2. tool_two: Processes simple text data with Agent A's second tool
+    3. tool_three: Performs a web search on a specific website for information
+    """
+    
+    prompt = f"""You are a tool selection assistant. Given a user request, select the most appropriate tool.
+    
+    {tool_descriptions}
+    
+    User request: "{user_input}"
+    
+    Think through which tool would be most appropriate. If the user is asking for information from a website or wants to search for something, use tool_three.
+    If they need simple text processing, choose between tool_one and tool_two based on the complexity of the request.
+    
+    Respond in the following format only:
+    Tool: [selected tool name - must be one of: tool_one, tool_two, tool_three]
+    Reasoning: [your reasoning for selecting this tool]
+    ExtractedData: [the relevant data from the user request to pass to the tool]
+    Website: [only if tool_three is selected, specify which website to search on; default is wikipedia.org]
+    """
+    
+    # Call the LLM to make the decision
+    response = llm.invoke(prompt)
+    response_text = response.content
+    
+    logger.info(f"LLM tool selection response: {response_text}")
+    
+    # Parse the response to extract the tool decision
+    lines = response_text.strip().split('\n')
+    decision = {}
+    
+    for line in lines:
+        if line.startswith('Tool:'):
+            decision['tool_name'] = line.replace('Tool:', '').strip()
+        elif line.startswith('Reasoning:'):
+            decision['reasoning'] = line.replace('Reasoning:', '').strip()
+        elif line.startswith('ExtractedData:'):
+            decision['extracted_data'] = line.replace('ExtractedData:', '').strip()
+        elif line.startswith('Website:'):
+            decision['website'] = line.replace('Website:', '').strip()
+    
+    # Default values if parsing fails
+    tool_name = decision.get('tool_name', 'tool_one')
+    reasoning = decision.get('reasoning', 'Default reasoning: Unable to parse LLM response properly')
+    extracted_data = decision.get('extracted_data', user_input)
+    website = decision.get('website', 'wikipedia.org')
+    
+    return ToolDecision(
+        tool_name=tool_name,
+        reasoning=reasoning,
+        extracted_data=extracted_data,
+        website=website
+    )
 
 def agent_a_node(state: GraphState) -> GraphState:
     """
