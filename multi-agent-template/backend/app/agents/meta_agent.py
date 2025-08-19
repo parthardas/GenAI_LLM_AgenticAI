@@ -4,7 +4,10 @@ from langgraph.graph import StateGraph
 from pydantic import BaseModel, Field
 #from instructor import Instructor as InstructorOpenAI
 from langchain_groq import ChatGroq
-from models.schemas import GraphState
+from models.schemas import GraphState, HealthcareRoutingDecision
+from agents.system_prompts import HEALTHCARE_ROUTER_SYSTEM_PROMPT, ROUTING_VALIDATION_PROMPT
+from langchain_core.messages import SystemMessage, HumanMessage
+import json
 #from groq import Groq
 import os
 
@@ -41,79 +44,421 @@ llm=llm_raw
 class AgentRoutingDecision(BaseModel):
     agent_name: str = Field(..., description="Name of the sub-agent to route to.")
 
+
+def build_conversation_context(conversation_history: list = None) -> str:
+    """
+    Build conversation context from previous exchanges.
+    
+    Args:
+        conversation_history (list): Previous conversation messages
+        
+    Returns:
+        str: Formatted conversation context
+    """
+    if not conversation_history:
+        return ""
+    
+    context_parts = []
+    # Get last 3 exchanges for context (to avoid token limits)
+    recent_history = conversation_history[-3:] if len(conversation_history) > 3 else conversation_history
+    
+    for msg in recent_history:
+        msg_type = msg.get('type', 'user')
+        content = msg.get('content', '')
+        timestamp = msg.get('timestamp', '')
+        
+        if content:  # Only include non-empty messages
+            if timestamp:
+                context_parts.append(f"- {msg_type} ({timestamp}): {content}")
+            else:
+                context_parts.append(f"- {msg_type}: {content}")
+    
+    if context_parts:
+        return "Previous conversation context:\n" + "\n".join(context_parts) + "\n\n"
+    return ""
+
+def create_user_routing_prompt(user_query: str, conversation_history: list = None) -> str:
+    """
+    Create the user message content for healthcare routing analysis.
+    
+    Args:
+        user_query (str): Current patient query
+        conversation_history (list): Previous conversation context
+        
+    Returns:
+        str: Formatted user message for routing analysis
+    """
+    context = build_conversation_context(conversation_history)
+    
+    return f"""{context}Current patient query: "{user_query}"
+Follow the system prompt to provide your routing decision."""
+
+def get_system_prompt() -> str:
+    """
+    Get the healthcare router system prompt.
+    
+    Returns:
+        str: The complete system prompt for healthcare routing
+    """
+    return HEALTHCARE_ROUTER_SYSTEM_PROMPT
+
+def get_validation_prompt() -> str:
+    """
+    Get the routing validation prompt template.
+    
+    Returns:
+        str: The validation prompt template
+    """
+    return ROUTING_VALIDATION_PROMPT
+
 #@node
+
+
+def validate_routing_decision(user_query: str, routing_decision: dict, agent_responses: str = "") -> dict:
+    """
+    LLM-as-a-judge function to validate routing decisions using ROUTING_VALIDATION_PROMPT.
+    
+    Args:
+        user_query (str): Original user query
+        routing_decision (dict): The routing decision made by the router
+        agent_responses (str): Responses from agents (if available)
+        
+    Returns:
+        dict: Validation results with score and recommendations
+    """
+    try:
+        # Format the validation prompt with actual data
+        validation_prompt = ROUTING_VALIDATION_PROMPT.format(
+            user_query=user_query,
+            routing_decision=json.dumps(routing_decision, indent=2),
+            agent_responses=agent_responses or "No agent responses yet"
+        )
+        
+        # Create messages for validation
+        messages = [
+            SystemMessage(content="You are an expert healthcare routing validator. Evaluate routing decisions for accuracy, safety, and effectiveness."),
+            HumanMessage(content=validation_prompt)
+        ]
+        
+        # Get validation response
+        response = llm.invoke(messages)
+        content = response.content.strip()
+        
+        # Clean and parse JSON response
+        if content.startswith('```json'):
+            content = content.replace('```json', '').replace('```', '').strip()
+        elif content.startswith('```'):
+            content = content.replace('```', '').strip()
+        
+        validation_result = json.loads(content)
+        
+        logger.info(f"Routing Validation Score: {validation_result.get('validation_score', 'N/A')}/10")
+        logger.info(f"Validation Passed: {validation_result.get('validation_passed', False)}")
+        
+        return validation_result
+        
+    except Exception as e:
+        logger.error(f"Error in routing validation: {e}")
+        # Return default validation result
+        return {
+            "validation_score": 5,
+            "accuracy_assessment": "Unable to validate due to error",
+            "completeness_check": "Validation failed",
+            "efficiency_rating": "Unknown",
+            "safety_evaluation": "Requires manual review",
+            "improvement_suggestions": ["Manual review recommended due to validation error"],
+            "alternative_routing": "Consider fallback routing",
+            "validation_passed": False
+        }
+
+# Updated router_node function with validation integration
 def router_node(state: GraphState) -> GraphState:
     """
-    Routes the current state to the appropriate agent node based on user input and LLM decision.
-    This function inspects the provided `state` (which can be a dict, an object with attributes, or a string),
-    extracts the user input, and determines if the conversation is complete. If not complete, it uses a language
-    model (LLM) to decide which sub-agent ("agent_a", "agent_b", or "agent_c") should handle the next step,
-    based on the user's input. The decision is validated and the state is updated accordingly.
-    Args:
-        state (GraphState): The current state of the conversation or workflow. Can be a dict, an object, or a string.
-    Returns:
-        GraphState: The updated state with routing information, or a dict indicating the end of the workflow.
-    Raises:
-        ValueError: If the LLM returns an invalid agent name not in {"agent_a", "agent_b", "agent_c"}.
+    Healthcare routing node that analyzes patient queries and routes to appropriate healthcare agents.
+    Routes to SYMPTOM_CHECKER, APPOINTMENT_SCHEDULER, or INSURANCE_INQUIRER based on patient needs.
+    Includes LLM-as-a-judge validation for routing decisions.
     """
-    # If state is a string, convert it to a GraphState object with all its attributes
+    # Handle different input types
     if isinstance(state, dict):
         state = GraphState(**state)
     elif isinstance(state, str):
-        # If state is a string, create a GraphState object with user_input set to the string
         state = GraphState(user_input=state)
     elif not isinstance(state, GraphState):
-        # If state is not a dict or string, assume it's a GraphState object
         state = GraphState(**state.__dict__)
 
-    logger.info(f"In router_node 1: state type: {type(state)}")
+    logger.info(f"Healthcare Router - Processing: {state.user_input}")
 
-    logger.info(f"In router_node: {state}")
-
-  
+    # Check if conversation is already complete
     if state.done:
-        #return {"route_to": "END", "user_input": state.user_input}
         return state
 
+    # Get conversation history if available
+    conversation_history = getattr(state, 'conversation_history', [])
 
-    # if getatstr(state, "done", False) or state.get("done", False):
-    #     return {"route_to": "END", "user_input": state.user_input}
+    try:
+        # Create system and user messages
+        system_prompt = get_system_prompt()
+        user_prompt = create_user_routing_prompt(state.user_input, conversation_history)
+        
+        # Create message objects
+        messages = [
+            SystemMessage(content=system_prompt),
+            HumanMessage(content=user_prompt)
+        ]
+        
+        # Get LLM response
+        response = llm.invoke(messages)
+        content = response.content.strip()
+        
+        # Clean and parse JSON response
+        if content.startswith('```json'):
+            content = content.replace('```json', '').replace('```', '').strip()
+        elif content.startswith('```'):
+            content = content.replace('```', '').strip()
+        
+        decision_data = json.loads(content)
+        decision = HealthcareRoutingDecision(**decision_data)
+        
+        logger.info(f"Healthcare Routing Decision: {decision.primary_agent} - {decision.reasoning}")
+        logger.info(f"Urgency Level: {decision.urgency_level}")
+        logger.info(f"Patient Intent: {decision.patient_intent}")
 
-    # Use LLM to choose sub-agent
-    parser = PydanticOutputParser(pydantic_object=AgentRoutingDecision)
-    prompt = (
-        "Imagine that you are a robot that receives an input and gives an output.\n"
-        "Remember: You are not a coder here and are not outputing code, but just giving the desired output as per the below logic.\n"
-        "If the user asks for agent A then return \"agent_a\".\n"
-        "Similarly for agent B or Agent C, return \"agent_b\" and \"agent_c\" respectively.\n"
-        "Based on the user input, decide which agent to use.\n"
-        "Output will be strictly in this JSON format: {\"agent_name\": \"<chosen string as per above instruction>\"}\n"
-        "Example: {\"agent_name\": \"agent_b\"}\n"
-        f"Input: {state.user_input}\n"
-    )
+        # VALIDATION STEP: Validate the routing decision using LLM-as-a-judge
+        validation_result = validate_routing_decision(
+            user_query=state.user_input,
+            routing_decision=decision_data
+        )
+        
+        # Check if validation passed
+        if not validation_result.get("validation_passed", False):
+            logger.warning(f"Routing validation failed. Score: {validation_result.get('validation_score', 0)}/10")
+            logger.warning(f"Issues: {validation_result.get('improvement_suggestions', [])}")
+            
+            # If validation suggests alternative routing, consider it
+            alternative_routing = validation_result.get("alternative_routing")
+            if alternative_routing and "SYMPTOM_CHECKER" in alternative_routing:
+                logger.info("Validator suggests routing to SYMPTOM_CHECKER for safety")
+                decision.primary_agent = "SYMPTOM_CHECKER"
+                decision.reasoning = f"Validator override: {alternative_routing}"
+                decision.urgency_level = "medium"
+            elif validation_result.get("validation_score", 0) < 3:
+                # Very low confidence - default to symptom checker for safety
+                logger.warning("Very low validation score - defaulting to SYMPTOM_CHECKER")
+                decision.primary_agent = "SYMPTOM_CHECKER"
+                decision.reasoning = "Low confidence routing - defaulting to symptom analysis for safety"
+                decision.urgency_level = "medium"
 
-    llm_response = llm.invoke(prompt)
-    # Parse the LLM response using the output parser
-    if hasattr(llm_response, "content"):
-        decision = parser.parse(llm_response.content)
-    else:
-        decision = parser.parse(llm_response)
+        # Handle emergency situations
+        if decision.urgency_level == "emergency":
+            state.route_to = "END"
+            state.done = True
+            state.response = (
+                "🚨 EMERGENCY DETECTED 🚨\n\n"
+                "If this is a medical emergency, please:\n"
+                "• Call 911 immediately\n"
+                "• Go to the nearest emergency room\n"
+                "• Contact emergency services\n\n"
+                "Do not delay seeking immediate medical attention for emergency situations."
+            )
+            return state
 
-    logger.info(f"In router_node: after LLM decision: {decision}")
-
-    # Validate decision
-    valid_agents = {"agent_a", "agent_b", "agent_c"}
-    if decision.agent_name not in valid_agents:
-        raise ValueError(f"Invalid agent selected: {decision.agent_name}")
+        # Map healthcare agents to internal agent names
+        agent_mapping = {
+            "SYMPTOM_CHECKER": "agent_a",
+            "APPOINTMENT_SCHEDULER": "agent_b", 
+            "INSURANCE_INQUIRER": "agent_c"
+        }
+        
+        # Validate and map primary agent
+        if decision.primary_agent not in agent_mapping:
+            logger.warning(f"Invalid primary agent: {decision.primary_agent}, defaulting to SYMPTOM_CHECKER")
+            decision.primary_agent = "SYMPTOM_CHECKER"
+        
+        primary_route = agent_mapping[decision.primary_agent]
+        
+        # Update state with routing information
+        state.route_to = primary_route
+        state.done = False
+        
+        # Store healthcare context in state (including validation results)
+        state.medical_context = {
+            'primary_agent': decision.primary_agent,
+            'secondary_agents': decision.secondary_agents,
+            'routing_sequence': decision.routing_sequence,
+            'routing_reasoning': decision.reasoning,
+            'urgency_level': decision.urgency_level,
+            'patient_intent': decision.patient_intent,
+            'expected_workflow': decision.expected_workflow,
+            'validation_criteria': decision.validation_criteria,
+            # Add validation results
+            'validation_score': validation_result.get('validation_score', 0),
+            'validation_passed': validation_result.get('validation_passed', False),
+            'validation_suggestions': validation_result.get('improvement_suggestions', [])
+        }
+        
+        # Create routing message for user feedback
+        urgency_indicators = {
+            "emergency": "🚨 EMERGENCY",
+            "high": "⚡ URGENT",
+            "medium": "⚠️ MODERATE", 
+            "low": "ℹ️ ROUTINE"
+        }
+        
+        agent_descriptions = {
+            "SYMPTOM_CHECKER": "Symptom Analysis & Health Guidance",
+            "APPOINTMENT_SCHEDULER": "Doctor Appointment Scheduling",
+            "INSURANCE_INQUIRER": "Insurance Coverage & Benefits"
+        }
+        
+        urgency_indicator = urgency_indicators.get(decision.urgency_level, "ℹ️")
+        agent_desc = agent_descriptions.get(decision.primary_agent, "Healthcare Service")
+        
+        state.routing_message = f"{urgency_indicator} Routing to {agent_desc}"
+        
+        # Add validation confidence to routing message if low
+        validation_score = validation_result.get('validation_score', 10)
+        if validation_score < 7:
+            state.routing_message += f" (Confidence: {validation_score}/10)"
+        
+        # Handle multi-agent workflows
+        if decision.secondary_agents:
+            state.routing_message += f" (Multi-step workflow: {' → '.join(decision.routing_sequence)})"
+        
+        logger.info(f"Healthcare Router - Final routing: {state.route_to} ({decision.primary_agent})")
+        logger.info(f"Expected workflow: {decision.expected_workflow}")
+        logger.info(f"Validation confidence: {validation_score}/10")
+        
+    except json.JSONDecodeError as e:
+        logger.error(f"Failed to parse JSON response: {e}")
+        # Fallback routing based on keywords
+        state = fallback_healthcare_routing(state)
+        
+    except Exception as e:
+        logger.error(f"Error in healthcare routing: {e}")
+        # Default to symptom checker for safety
+        state.route_to = "agent_a"
+        state.medical_context = {
+            'primary_agent': 'SYMPTOM_CHECKER',
+            'routing_reasoning': 'Defaulted to symptom checker due to routing error',
+            'urgency_level': 'medium',
+            'patient_intent': 'healthcare inquiry',
+            'validation_score': 0,
+            'validation_passed': False
+        }
+        state.routing_message = "⚠️ Routing to Symptom Analysis (default)"
     
-    #print the type of the state object
-    logger.info(f"In router_node 2: state type: {type(state)}")
+    return state
 
-    # Update the state with the routing decision
-    state.route_to = decision.agent_name
+def fallback_healthcare_routing(state: GraphState) -> GraphState:
+    """
+    Fallback routing logic when LLM parsing fails or returns invalid response.
+    Uses keyword-based routing for basic healthcare triage, defaulting to SYMPTOM_CHECKER for safety.
+    
+    Args:
+        state (GraphState): Current state with user input
+        
+    Returns:
+        GraphState: Updated state with fallback routing decision
+    """
+    user_input_lower = state.user_input.lower()
+    
+    # Emergency keywords - highest priority
+    emergency_keywords = [
+        "emergency", "911", "chest pain", "can't breathe", "difficulty breathing",
+        "heart attack", "stroke", "severe pain", "unconscious", "suicide",
+        "overdose", "bleeding heavily", "choking"
+    ]
+    
+    # Appointment keywords
+    appointment_keywords = [
+        "appointment", "schedule", "book", "doctor", "see a doctor", 
+        "visit", "consultation", "check-up", "available", "when can i see",
+        "reschedule", "cancel appointment", "doctor availability"
+    ]
+    
+    # Insurance keywords
+    insurance_keywords = [
+        "insurance", "coverage", "policy", "copay", "deductible", 
+        "cost", "billing", "claim", "benefits", "covered", "premium",
+        "out of pocket", "authorization", "carrier"
+    ]
+    
+    logger.info(f"Fallback routing activated for: {state.user_input}")
+    
+    # Check for emergency situations first (highest priority)
+    if any(keyword in user_input_lower for keyword in emergency_keywords):
+        state.route_to = "END"
+        state.done = True
+        state.response = (
+            "🚨 EMERGENCY DETECTED 🚨\n\n"
+            "If this is a medical emergency, please:\n"
+            "• Call 911 immediately\n"
+            "• Go to the nearest emergency room\n"
+            "• Contact emergency services\n\n"
+            "Do not delay seeking immediate medical attention for emergency situations."
+        )
+        state.medical_context = {
+            'primary_agent': 'EMERGENCY',
+            'routing_reasoning': 'Fallback: Emergency keywords detected',
+            'urgency_level': 'emergency',
+            'patient_intent': 'emergency medical situation',
+            'validation_score': 0,
+            'validation_passed': False
+        }
+        state.routing_message = "🚨 EMERGENCY - Call 911 immediately!"
+        logger.info("Fallback routing: Emergency detected")
+        return state
+    
+    # Check for insurance-related queries
+    elif any(keyword in user_input_lower for keyword in insurance_keywords):
+        state.route_to = "agent_c"
+        state.medical_context = {
+            'primary_agent': 'INSURANCE_INQUIRER',
+            'routing_reasoning': 'Fallback: Insurance-related keywords detected',
+            'urgency_level': 'low',
+            'patient_intent': 'insurance inquiry',
+            'validation_score': 6,  # Medium confidence for keyword matching
+            'validation_passed': True
+        }
+        state.routing_message = "ℹ️ Routing to Insurance Coverage & Benefits (fallback)"
+        logger.info("Fallback routing: Insurance inquiry detected")
+    
+    # Check for appointment-related queries
+    elif any(keyword in user_input_lower for keyword in appointment_keywords):
+        state.route_to = "agent_b"
+        state.medical_context = {
+            'primary_agent': 'APPOINTMENT_SCHEDULER',
+            'routing_reasoning': 'Fallback: Appointment-related keywords detected',
+            'urgency_level': 'medium',
+            'patient_intent': 'appointment scheduling',
+            'validation_score': 6,  # Medium confidence for keyword matching
+            'validation_passed': True
+        }
+        state.routing_message = "⚠️ Routing to Doctor Appointment Scheduling (fallback)"
+        logger.info("Fallback routing: Appointment request detected")
+    
+    # Default to SYMPTOM_CHECKER for all other cases (safety first)
+    else:
+        state.route_to = "agent_a"
+        state.medical_context = {
+            'primary_agent': 'SYMPTOM_CHECKER',
+            'routing_reasoning': 'Fallback: Default to symptom checker for safety when LLM routing fails',
+            'urgency_level': 'medium',
+            'patient_intent': 'healthcare inquiry - needs evaluation',
+            'validation_score': 5,  # Lower confidence since it's a fallback
+            'validation_passed': True  # Safe default
+        }
+        state.routing_message = "⚠️ Routing to Symptom Analysis & Health Guidance (fallback)"
+        logger.info("Fallback routing: Defaulting to SYMPTOM_CHECKER for safety")
+    
+    # Set common fallback properties
     state.done = False
-
-    # Log the decision
-    logger.info(f"In router_node: before router return: {state}")
+    
+    # Add fallback indicator to medical context
+    if 'medical_context' in state.__dict__:
+        state.medical_context['is_fallback_routing'] = True
+        state.medical_context['fallback_reason'] = 'LLM routing failed or returned invalid response'
+    
+    logger.info(f"Fallback routing completed: {state.route_to} - {state.medical_context['routing_reasoning']}")
     
     return state

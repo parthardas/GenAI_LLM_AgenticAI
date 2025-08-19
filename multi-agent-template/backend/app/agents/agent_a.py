@@ -199,7 +199,7 @@ def llm_tool_decision(user_input: str) -> ToolDecision:
     Tool: [selected tool name - must be one of: tool_one, tool_two, tool_three]
     Reasoning: [your reasoning for selecting this tool]
     ExtractedData: [the relevant data from the user request to pass to the tool]
-    Website: [only if tool_three is selected, specify which website to search on; default is wikipedia.org]
+    Website: [only if tool_three is selected, specify which website to search on; default is webmd.com]
     """
     
     # Call the LLM to make the decision
@@ -226,7 +226,7 @@ def llm_tool_decision(user_input: str) -> ToolDecision:
     tool_name = decision.get('tool_name', 'tool_three')
     reasoning = decision.get('reasoning', 'Default reasoning: Unable to parse LLM response properly')
     extracted_data = decision.get('extracted_data', user_input)
-    website = decision.get('website', 'wikipedia.org')
+    website = decision.get('website', 'webmd.com')
     
     return ToolDecision(
         tool_name=tool_name,
@@ -277,8 +277,8 @@ def agent_a_node(state: GraphState) -> GraphState:
             response = f"[Tool Selection: {decision.reasoning}]\n\n{tool_result.result}"
             
         elif decision.tool_name == "tool_three":
-            # Use provided website or default to wikipedia
-            website = decision.website if decision.website else "wikipedia.org"
+            # Use provided website or default to webmd.com
+            website = decision.website if decision.website else "webmd.com"
             search_input = SearchInputSchema(query=decision.extracted_data, website=website)
             search_result = tool_three(tool_input=search_input)
             
