@@ -1,4 +1,5 @@
 # backend/app/main.py
+from unittest import result
 from fastapi import FastAPI, HTTPException
 from langgraph.graph import StateGraph, END
 from fastapi.middleware.cors import CORSMiddleware
@@ -42,18 +43,42 @@ async def chat_endpoint(request: ChatRequest):
 
         logger.info(f"initial state: {initial_state}")
 
-        #result = meta_agent.process_query(
-        result = compiled_graph.invoke(initial_state, config={"recursion_limit": 5})
+        # compiled_graph.invoke() returns a dictionary, not a GraphState object
+        result_dict = compiled_graph.invoke(initial_state, config={"recursion_limit": 5})
 
+        logger.info(f"Result response: {result_dict.get('response', 'No response')}")
 
-        logger.info(f"Result response: {result['response']}")
+        # Extract values from the dictionary
+        response_value = result_dict.get('response')
+        medical_context = result_dict.get('medical_context', {})
+        routing_message = result_dict.get('routing_message', '')
+        route_to = result_dict.get('route_to')
 
-        # Convert GraphState to dict for ChatResponse, or access attributes directly
-        return ChatResponse(
-            #user_input=result["user_input"],
-            response=result["response"],
+        # Extract the content from the response
+        if isinstance(response_value, dict):
+            # For dictionary responses (from conversation agent)
+            response_content = response_value.get('content', str(response_value))
+            response_data = {
+                "response": response_content,
+                "medical_context": medical_context,
+                "routing_info": {
+                    "routing_message": routing_message,
+                    "route_to": route_to,
+                    "agent_used": response_value.get('agent') if isinstance(response_value, dict) else None
+                }
+            }
+        else:
+            # For string responses (from other agents)
+            response_data = {
+                "response": response_value or "No response generated",
+                "medical_context": medical_context,
+                "routing_info": {
+                    "routing_message": routing_message,
+                    "route_to": route_to
+                }
+            }
 
-        )
+        return ChatResponse(**response_data)
         
     except Exception as e:
         logger.error(f"Chat endpoint error: {e}")

@@ -36,7 +36,7 @@ class ReasoningPlan(BaseModel):
 class GraphState(BaseModel):
     # Core input/output fields
     user_input: str = ""
-    response: Optional[str] = None
+    response: Optional[Any] = None
     
     # Routing and workflow control
     route_to: Optional[str] = None
@@ -68,9 +68,13 @@ class ChatRequest(BaseModel):
     message: str
     conversation_id: Optional[str] = None
 
+# Replace the ChatResponse class:
+
 class ChatResponse(BaseModel):
-    response: str
+    response: Any  # Changed from str to Any to handle both strings and dictionaries
     conversation_id: Optional[str] = None
+    medical_context: Optional[Dict[str, Any]] = None
+    routing_info: Optional[Dict[str, Any]] = None
     reasoning_steps: Optional[List[str]] = None
     calculations: Optional[List[ArithmeticOutput]] = None
 
@@ -83,3 +87,4 @@ class HealthcareRoutingDecision(BaseModel):
     patient_intent: str = Field(..., description="Brief description of patient intent")
     expected_workflow: str = Field(..., description="How agents will work together")
     validation_criteria: str = Field(..., description="How to verify routing was correct")
+    tool_selection: str = Field(..., description="Criteria for selecting tools or resources")

@@ -77,6 +77,8 @@ def build_conversation_context(conversation_history: list = None) -> str:
         return "Previous conversation context:\n" + "\n".join(context_parts) + "\n\n"
     return ""
 
+# Update the create_user_routing_prompt function:
+
 def create_user_routing_prompt(user_query: str, conversation_history: list = None) -> str:
     """
     Create the user message content for healthcare routing analysis.
@@ -91,7 +93,10 @@ def create_user_routing_prompt(user_query: str, conversation_history: list = Non
     context = build_conversation_context(conversation_history)
     
     return f"""{context}Current patient query: "{user_query}"
-Follow the system prompt to provide your routing decision."""
+
+Please analyze this query and provide your routing decision as a JSON object ONLY. Do not include any explanatory text, markdown formatting, or additional content outside the JSON structure.
+
+Respond with only the JSON object following the format specified in the system prompt."""
 
 def get_system_prompt() -> str:
     """
@@ -171,6 +176,92 @@ def validate_routing_decision(user_query: str, routing_decision: dict, agent_res
             "validation_passed": False
         }
 
+
+# Replace the handle_general_conversation function:
+
+def handle_general_conversation(state: GraphState) -> GraphState:
+    """
+    Handle general conversation topics using LLM for natural responses.
+    
+    Args:
+        state (GraphState): Current state with user input
+        
+    Returns:
+        GraphState: Updated state with LLM-generated conversation response
+    """
+    try:
+        # Create a conversation system prompt
+        conversation_system_prompt = """You are a friendly healthcare assistant. You can help users with:
+
+1. **Symptom Analysis**: Analyze symptoms and provide health guidance
+2. **Appointment Scheduling**: Help schedule doctor appointments 
+3. **Insurance Support**: Answer insurance coverage and billing questions
+
+For general conversation, greetings, or questions about your capabilities:
+- Be warm, helpful, and professional
+- Briefly explain what you can do
+- Guide users toward healthcare services you offer
+- Keep responses concise but informative
+- Always maintain a healthcare-focused context
+
+Remember: You are a healthcare triage assistant, so gently steer conversations toward health-related topics when appropriate."""
+
+        # Create user message for conversation
+        user_message = f"""The user said: "{state.user_input}"
+
+Please provide a helpful, conversational response. If they're greeting you or asking about your capabilities, explain what healthcare services you offer. Keep it friendly but professional."""
+
+        # Create messages for LLM
+        messages = [
+            SystemMessage(content=conversation_system_prompt),
+            HumanMessage(content=user_message)
+        ]
+        
+        # Get LLM response
+        llm_response = llm.invoke(messages)
+        conversation_content = llm_response.content.strip()
+        
+        # Create structured response
+        response = {
+            "agent": "CONVERSATION_AGENT",
+            "content": conversation_content,
+            "content_type": "conversation",
+            "success": True,
+            "facilities_mentioned": True if any(word in state.user_input.lower() for word in ['what', 'how', 'help', 'services', 'facilities', 'can you']) else False
+        }
+        
+        logger.info(f"LLM conversation response generated for: {state.user_input}")
+        
+    except Exception as e:
+        logger.error(f"Error generating conversation response: {e}")
+        # Fallback response
+        response = {
+            "agent": "CONVERSATION_AGENT",
+            "content": "Hello! I'm your healthcare assistant. I can help you with symptoms, schedule appointments, and answer insurance questions. How can I assist you today?",
+            "content_type": "conversation_fallback",
+            "success": False,
+            "error": str(e)
+        }
+    
+    # Update state
+    state.response = response
+    state.done = True
+    state.route_to = "END"
+    
+    # Update medical context for conversation
+    state.medical_context = {
+        'primary_agent': 'CONVERSATION_AGENT',
+        'routing_reasoning': 'General conversation handled with LLM response',
+        'urgency_level': 'low',
+        'patient_intent': 'general conversation',
+        'validation_score': 8,
+        'validation_passed': True,
+        'tool_selection': 'Conversation agent selected for greetings and general inquiries'
+    }
+    
+    logger.info(f"General conversation handled with LLM: {response.get('content_type', 'unknown')}")
+    return state
+
 # Updated router_node function with validation integration
 def router_node(state: GraphState) -> GraphState:
     """
@@ -195,6 +286,7 @@ def router_node(state: GraphState) -> GraphState:
     # Get conversation history if available
     conversation_history = getattr(state, 'conversation_history', [])
 
+
     try:
         # Create system and user messages
         system_prompt = get_system_prompt()
@@ -210,11 +302,18 @@ def router_node(state: GraphState) -> GraphState:
         response = llm.invoke(messages)
         content = response.content.strip()
         
+        logger.info(f"Raw LLM response: {content}")  # Add this for debugging
+        
         # Clean and parse JSON response
         if content.startswith('```json'):
             content = content.replace('```json', '').replace('```', '').strip()
         elif content.startswith('```'):
             content = content.replace('```', '').strip()
+        
+        # Check if content is empty or not valid JSON
+        if not content or content.isspace():
+            logger.error("Empty response from LLM")
+            raise json.JSONDecodeError("Empty response", content, 0)
         
         decision_data = json.loads(content)
         decision = HealthcareRoutingDecision(**decision_data)
@@ -223,6 +322,20 @@ def router_node(state: GraphState) -> GraphState:
         logger.info(f"Urgency Level: {decision.urgency_level}")
         logger.info(f"Patient Intent: {decision.patient_intent}")
 
+    except json.JSONDecodeError as e:
+        logger.error(f"Failed to parse JSON response: {e}")
+        logger.error(f"Raw content: {content}")
+        # Fallback routing based on keywords
+        state = fallback_healthcare_routing(state)
+        return state
+    
+    except Exception as e:
+        logger.error(f"Error in healthcare routing: {e}")
+        # Fallback routing based on keywords
+        state = fallback_healthcare_routing(state)
+        return state
+
+    try:
         # VALIDATION STEP: Validate the routing decision using LLM-as-a-judge
         validation_result = validate_routing_decision(
             user_query=state.user_input,
@@ -236,17 +349,22 @@ def router_node(state: GraphState) -> GraphState:
             
             # If validation suggests alternative routing, consider it
             alternative_routing = validation_result.get("alternative_routing")
-            if alternative_routing and "SYMPTOM_CHECKER" in alternative_routing:
+            if alternative_routing and "CONVERSATION_AGENT" in alternative_routing:
+                logger.info("Validator suggests routing to CONVERSATION_AGENT")
+                decision.primary_agent = "CONVERSATION_AGENT"
+                decision.reasoning = f"Validator override: {alternative_routing}"
+                decision.urgency_level = "low"
+            elif alternative_routing and "SYMPTOM_CHECKER" in alternative_routing:
                 logger.info("Validator suggests routing to SYMPTOM_CHECKER for safety")
                 decision.primary_agent = "SYMPTOM_CHECKER"
                 decision.reasoning = f"Validator override: {alternative_routing}"
                 decision.urgency_level = "medium"
             elif validation_result.get("validation_score", 0) < 3:
-                # Very low confidence - default to symptom checker for safety
-                logger.warning("Very low validation score - defaulting to SYMPTOM_CHECKER")
-                decision.primary_agent = "SYMPTOM_CHECKER"
-                decision.reasoning = "Low confidence routing - defaulting to symptom analysis for safety"
-                decision.urgency_level = "medium"
+                # Very low confidence - default to conversation for safety in unclear cases
+                logger.warning("Very low validation score - defaulting to CONVERSATION_AGENT")
+                decision.primary_agent = "CONVERSATION_AGENT"
+                decision.reasoning = "Low confidence routing - defaulting to conversation for clarification"
+                decision.urgency_level = "low"
 
         # Handle emergency situations
         if decision.urgency_level == "emergency":
@@ -266,16 +384,21 @@ def router_node(state: GraphState) -> GraphState:
         agent_mapping = {
             "SYMPTOM_CHECKER": "agent_a",
             "APPOINTMENT_SCHEDULER": "agent_b", 
-            "INSURANCE_INQUIRER": "agent_c"
+            "INSURANCE_INQUIRER": "agent_c",
+            "CONVERSATION_AGENT": "conversation"
         }
         
         # Validate and map primary agent
         if decision.primary_agent not in agent_mapping:
-            logger.warning(f"Invalid primary agent: {decision.primary_agent}, defaulting to SYMPTOM_CHECKER")
-            decision.primary_agent = "SYMPTOM_CHECKER"
+            logger.warning(f"Invalid primary agent: {decision.primary_agent}, defaulting to CONVERSATION_AGENT")
+            decision.primary_agent = "CONVERSATION_AGENT"
         
         primary_route = agent_mapping[decision.primary_agent]
-        
+
+        # Handle conversation agent within meta_agent
+        if decision.primary_agent == "CONVERSATION_AGENT":
+            return handle_general_conversation(state)
+
         # Update state with routing information
         state.route_to = primary_route
         state.done = False
@@ -307,7 +430,8 @@ def router_node(state: GraphState) -> GraphState:
         agent_descriptions = {
             "SYMPTOM_CHECKER": "Symptom Analysis & Health Guidance",
             "APPOINTMENT_SCHEDULER": "Doctor Appointment Scheduling",
-            "INSURANCE_INQUIRER": "Insurance Coverage & Benefits"
+            "INSURANCE_INQUIRER": "Insurance Coverage & Benefits",
+            "CONVERSATION_AGENT": "General Conversation Assistant"
         }
         
         urgency_indicator = urgency_indicators.get(decision.urgency_level, "ℹ️")
@@ -437,22 +561,39 @@ def fallback_healthcare_routing(state: GraphState) -> GraphState:
         state.routing_message = "⚠️ Routing to Doctor Appointment Scheduling (fallback)"
         logger.info("Fallback routing: Appointment request detected")
     
-    # Default to SYMPTOM_CHECKER for all other cases (safety first)
+    # Check for general conversation topics (non-medical)
+    elif any(word in user_input_lower for word in ['hello', 'hi', 'hey', 'good morning', 'good afternoon', 'good evening', 'how are you', 'what can you do', 'what services', 'what facilities', 'how can you help', 'weather', 'chat', 'talk']):
+        state.medical_context = {
+            'primary_agent': 'CONVERSATION_AGENT',
+            'secondary_agents': [],
+            'routing_sequence': ['CONVERSATION_AGENT'],
+            'reasoning': 'Fallback: General conversation keywords detected',
+            'urgency_level': 'low',
+            'patient_intent': 'general conversation',
+            'expected_workflow': 'Single agent handling general inquiries',
+            'validation_criteria': 'Conversation agent selected for general inquiries',
+            'tool_selection': 'Conversation agent for general inquiries and greetings'
+        }
+        
+        state.routing_message = "💬 Handling General Conversation (fallback)"
+        logger.info("Fallback routing: General conversation detected")
+        return handle_general_conversation(state)
+
+    # Default to SYMPTOM_CHECKER for health-related unclear cases (safety first)
     else:
         state.route_to = "agent_a"
         state.medical_context = {
             'primary_agent': 'SYMPTOM_CHECKER',
-            'routing_reasoning': 'Fallback: Default to symptom checker for safety when LLM routing fails',
+            'routing_reasoning': 'Fallback: Default to symptom checker for safety when unclear health-related query',
             'urgency_level': 'medium',
-            'patient_intent': 'healthcare inquiry - needs evaluation',
+            'patient_intent': 'unclear healthcare inquiry - needs evaluation',
             'validation_score': 5,  # Lower confidence since it's a fallback
-            'validation_passed': True  # Safe default
+            'validation_passed': True  # Safe default for health queries
         }
         state.routing_message = "⚠️ Routing to Symptom Analysis & Health Guidance (fallback)"
-        logger.info("Fallback routing: Defaulting to SYMPTOM_CHECKER for safety")
-    
-    # Set common fallback properties
-    state.done = False
+        logger.info("Fallback routing: Defaulting to SYMPTOM_CHECKER for unclear health queries")
+        # Set common fallback properties
+        state.done = False
     
     # Add fallback indicator to medical context
     if 'medical_context' in state.__dict__:

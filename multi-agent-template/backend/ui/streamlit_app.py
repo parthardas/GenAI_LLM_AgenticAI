@@ -14,10 +14,6 @@ st.set_page_config(
 )
 
 # Custom CSS for healthcare styling
-# Replace the existing CSS section with this updated version:
-
-# Replace the existing CSS section with this updated version:
-
 st.markdown("""
 <style>
     .main-header {
@@ -82,12 +78,18 @@ st.markdown("""
         margin-bottom: 1rem;
         border: 1px solid #DEE2E6;
     }
+    .response-details {
+        background-color: #F8F9FA;
+        padding: 0.5rem;
+        border-radius: 5px;
+        margin: 0.5rem 0;
+        font-size: 0.9rem;
+    }
 </style>
 """, unsafe_allow_html=True)
 
 # Backend API configuration
-BACKEND_URL = "http://localhost:8000"  # Adjust if your backend runs on different port
-#CHAT_ENDPOINT = f"{BACKEND_URL}/api/chat"
+BACKEND_URL = "http://localhost:8000"
 CHAT_ENDPOINT = f"{BACKEND_URL}/chat"
 
 def initialize_session_state():
@@ -105,7 +107,8 @@ def initialize_session_state():
             'appointment_date': None,
             'insurance_info': None,
             'urgency_level': None,
-            'primary_agent': None
+            'primary_agent': None,
+            'current_agent': None
         }
 
 def call_backend_api(user_input: str) -> Dict[str, Any]:
@@ -113,7 +116,7 @@ def call_backend_api(user_input: str) -> Dict[str, Any]:
     try:
         payload = {
             "message": user_input,
-            "session_id": st.session_state.session_id
+            "conversation_id": st.session_state.session_id
         }
         
         response = requests.post(
@@ -151,33 +154,71 @@ def call_backend_api(user_input: str) -> Dict[str, Any]:
             "routing_info": {}
         }
 
-def update_medical_summary(medical_context: Dict[str, Any], user_input: str):
+def extract_response_content(response_data: Any) -> str:
+    """Extract the main content from API response, handling both dict and string formats."""
+    if isinstance(response_data, dict):
+        # Handle structured response from agents like CONVERSATION_AGENT
+        return response_data.get('content', str(response_data))
+    elif isinstance(response_data, str):
+        # Handle string responses
+        return response_data
+    else:
+        # Fallback for other types
+        return str(response_data)
+
+def extract_agent_info(response_data: Any, routing_info: Dict[str, Any]) -> Dict[str, Any]:
+    """Extract agent information from response and routing data."""
+    agent_info = {
+        'agent_name': 'Unknown',
+        'tool_used': None,
+        'content_type': 'text',
+        'success': True
+    }
+    
+    if isinstance(response_data, dict):
+        agent_info.update({
+            'agent_name': response_data.get('agent', 'Unknown'),
+            'tool_used': response_data.get('tool_used'),
+            'content_type': response_data.get('content_type', 'text'),
+            'success': response_data.get('success', True)
+        })
+    
+    # Get agent from routing info if not in response
+    if agent_info['agent_name'] == 'Unknown' and routing_info:
+        agent_used = routing_info.get('agent_used')
+        if agent_used:
+            agent_info['agent_name'] = agent_used
+    
+    return agent_info
+
+def update_medical_summary(medical_context: Dict[str, Any], user_input: str, agent_info: Dict[str, Any]):
     """Update the medical summary in session state."""
     if not medical_context:
         return
     
     # Extract symptoms from user input (simple keyword extraction)
-    symptom_keywords = ['pain', 'hurt', 'fever', 'cough', 'headache', 'sick', 'ache', 'sore', 'dizzy', 'nausea']
+    symptom_keywords = ['pain', 'hurt', 'fever', 'cough', 'headache', 'sick', 'ache', 'sore', 'dizzy', 'nausea', 'tired', 'fatigue']
     detected_symptoms = [word for word in user_input.lower().split() if any(symptom in word for symptom in symptom_keywords)]
     
     if detected_symptoms:
         st.session_state.medical_summary['symptoms'].extend(detected_symptoms)
-        # Remove duplicates
-        st.session_state.medical_summary['symptoms'] = list(set(st.session_state.medical_summary['symptoms']))
+        # Remove duplicates and limit to last 10
+        st.session_state.medical_summary['symptoms'] = list(set(st.session_state.medical_summary['symptoms']))[-10:]
     
     # Update other fields from medical context
     st.session_state.medical_summary['urgency_level'] = medical_context.get('urgency_level')
     st.session_state.medical_summary['primary_agent'] = medical_context.get('primary_agent')
+    st.session_state.medical_summary['current_agent'] = agent_info.get('agent_name')
     
     # Update appointment info if present
     if 'doctor' in user_input.lower() or medical_context.get('primary_agent') == 'APPOINTMENT_SCHEDULER':
-        # This would be enhanced with actual appointment data from backend
-        st.session_state.medical_summary['doctor_chosen'] = "To be determined"
-        st.session_state.medical_summary['appointment_date'] = "To be scheduled"
+        if 'schedule' in user_input.lower() or 'appointment' in user_input.lower():
+            st.session_state.medical_summary['doctor_chosen'] = "Scheduling in progress"
+            st.session_state.medical_summary['appointment_date'] = "Being scheduled"
     
     # Update insurance info if present
     if 'insurance' in user_input.lower() or medical_context.get('primary_agent') == 'INSURANCE_INQUIRER':
-        st.session_state.medical_summary['insurance_info'] = "Being processed"
+        st.session_state.medical_summary['insurance_info'] = "Inquiry in progress"
 
 def render_sidebar():
     """Render the sidebar with medical summary."""
@@ -188,6 +229,21 @@ def render_sidebar():
         st.markdown('<div class="sidebar-section">', unsafe_allow_html=True)
         st.markdown("**Session ID:**")
         st.code(st.session_state.session_id[:8] + "...")
+        st.markdown('</div>', unsafe_allow_html=True)
+    
+    # Current Agent
+    with st.sidebar:
+        st.markdown('<div class="sidebar-section">', unsafe_allow_html=True)
+        st.markdown("**🤖 Current Service:**")
+        agent = st.session_state.medical_summary['current_agent']
+        agent_names = {
+            'SYMPTOM_CHECKER': '🩺 Symptom Analysis',
+            'APPOINTMENT_SCHEDULER': '📅 Appointment Booking',
+            'INSURANCE_INQUIRER': '🛡️ Insurance Support',
+            'CONVERSATION_AGENT': '💬 General Conversation'
+        }
+        current_service = agent_names.get(agent, "*Waiting for input*")
+        st.markdown(current_service)
         st.markdown('</div>', unsafe_allow_html=True)
     
     # Symptoms Section
@@ -233,20 +289,6 @@ def render_sidebar():
         st.markdown(insurance if insurance else "*No insurance information*")
         st.markdown('</div>', unsafe_allow_html=True)
     
-    # Current Agent
-    with st.sidebar:
-        st.markdown('<div class="sidebar-section">', unsafe_allow_html=True)
-        st.markdown("**🤖 Current Service:**")
-        agent = st.session_state.medical_summary['primary_agent']
-        agent_names = {
-            'SYMPTOM_CHECKER': '🩺 Symptom Analysis',
-            'APPOINTMENT_SCHEDULER': '📅 Appointment Booking',
-            'INSURANCE_INQUIRER': '🛡️ Insurance Support'
-        }
-        current_service = agent_names.get(agent, "*Waiting for input*")
-        st.markdown(current_service)
-        st.markdown('</div>', unsafe_allow_html=True)
-    
     # Clear conversation button
     st.sidebar.markdown("---")
     if st.sidebar.button("🔄 Clear Conversation", type="secondary"):
@@ -257,21 +299,41 @@ def render_sidebar():
             'appointment_date': None,
             'insurance_info': None,
             'urgency_level': None,
-            'primary_agent': None
+            'primary_agent': None,
+            'current_agent': None
         }
         st.session_state.session_id = str(uuid.uuid4())
         st.rerun()
 
-def render_chat_message(role: str, content: str, routing_info: str = None, urgency: str = None):
-    """Render a chat message with appropriate styling."""
+def render_chat_message(role: str, content: str, message_data: Dict[str, Any] = None):
+    """Render a chat message with appropriate styling and details."""
     if role == "user":
         st.markdown(f'<div class="chat-message-user"><strong>You:</strong><br>{content}</div>', unsafe_allow_html=True)
     else:
         st.markdown(f'<div class="chat-message-assistant"><strong>Healthcare Assistant:</strong><br>{content}</div>', unsafe_allow_html=True)
         
-        # Show routing information if available
-        if routing_info:
-            st.markdown(f'<div class="routing-info">{routing_info}</div>', unsafe_allow_html=True)
+        # Show additional details if available
+        if message_data:
+            # Show routing information
+            routing_info = message_data.get('routing_info')
+            if routing_info:
+                st.markdown(f'<div class="routing-info">{routing_info}</div>', unsafe_allow_html=True)
+            
+            # Show agent and tool information
+            agent_info = message_data.get('agent_info', {})
+            if agent_info and agent_info.get('agent_name') != 'Unknown':
+                details = []
+                details.append(f"Agent: {agent_info.get('agent_name')}")
+                
+                if agent_info.get('tool_used'):
+                    details.append(f"Tool: {agent_info.get('tool_used')}")
+                
+                if agent_info.get('content_type'):
+                    details.append(f"Type: {agent_info.get('content_type')}")
+                
+                if details:
+                    details_text = " | ".join(details)
+                    st.markdown(f'<div class="response-details">{details_text}</div>', unsafe_allow_html=True)
 
 def main():
     """Main Streamlit application."""
@@ -297,8 +359,7 @@ def main():
         render_chat_message(
             message['role'], 
             message['content'],
-            message.get('routing_info'),
-            message.get('urgency')
+            message.get('message_data')
         )
     
     # User input
@@ -332,22 +393,32 @@ def main():
         # Show thinking spinner
         with st.spinner("🤔 Analyzing your healthcare query..."):
             # Call backend API
-            response_data = call_backend_api(user_input)
+            api_response = call_backend_api(user_input)
         
         # Extract response components
-        assistant_response = response_data.get('response', 'No response received')
-        medical_context = response_data.get('medical_context', {})
-        routing_info = response_data.get('routing_info', {})
+        raw_response = api_response.get('response', 'No response received')
+        medical_context = api_response.get('medical_context', {})
+        routing_info = api_response.get('routing_info', {})
+        
+        # Extract content and agent information
+        assistant_content = extract_response_content(raw_response)
+        agent_info = extract_agent_info(raw_response, routing_info)
         
         # Update medical summary
-        update_medical_summary(medical_context, user_input)
+        update_medical_summary(medical_context, user_input, agent_info)
+        
+        # Prepare message data for display
+        message_data = {
+            'routing_info': routing_info.get('routing_message'),
+            'agent_info': agent_info,
+            'medical_context': medical_context
+        }
         
         # Add assistant response to history
         st.session_state.conversation_history.append({
             'role': 'assistant',
-            'content': assistant_response,
-            'routing_info': routing_info.get('routing_message'),
-            'urgency': medical_context.get('urgency_level'),
+            'content': assistant_content,
+            'message_data': message_data,
             'timestamp': datetime.now().isoformat()
         })
         
