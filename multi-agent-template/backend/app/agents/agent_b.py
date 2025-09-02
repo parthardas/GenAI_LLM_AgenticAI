@@ -7,6 +7,9 @@ from langchain.agents import tool
 from langchain_groq import ChatGroq
 from models.schemas import GraphState
 import os
+from agents.system_prompts import AGENT_B_TOOL_SELECTION_SYSTEM_PROMPT
+from langchain_core.messages import SystemMessage, HumanMessage
+
 
 # Load environment variables
 from dotenv import load_dotenv
@@ -97,39 +100,31 @@ def llm_tool_decision(user_input: str) -> ToolDecision:
     Returns:
         ToolDecision: Contains the selected tool name, reasoning, and extracted parameters
     """
-    # Prepare the prompt for tool selection
-    tool_descriptions = """
-    Available tools:
-    1. tool_one: Processes simple text data with Agent B's first tool
-    2. tool_two: Processes simple text data with Agent B's second tool
-    """
     
-    prompt = f"""You are a tool selection assistant. Given a user request, select the most appropriate tool.
-    
-    {tool_descriptions}
-    
-    User request: "{user_input}"
-    
-    Think through which tool would be most appropriate. 
-    This Agent B is to schedule doctors's appointments. 
-    Users can schedule within this practice or with the affiliated network.
-    Ask users if they want to schedule with the practice or the network.
-    If the user wants to schedule with the practice, use schedule_practice_doctors.
-    If the user wants to schedule with the affiliated network, use schedule_network_doctors.
+    # Create human message with user input
+    human_prompt = f"""User request: "{user_input}"
 
-    Respond in the following format only:
-    Tool: [selected tool name - must be one of: schedule_practice_doctors, schedule_network_doctors]
-    Reasoning: [your reasoning for selecting this tool]
-    ExtractedData: [the relevant data from the user request to pass to the tool]
-    """
+This user wants to schedule a doctor's appointment. Analyze their request to determine if they want to schedule:
+1. With doctors in our practice (schedule_practice_doctors)
+2. With doctors in our affiliated network (schedule_network_doctors)
+
+If they don't specify, ask them to clarify their preference but default to practice doctors.
+
+Respond in the exact format specified in the system prompt."""
     
-    # Call the LLM to make the decision
-    response = llm.invoke(prompt)
+    # Create messages with separated system and human prompts
+    messages = [
+        SystemMessage(content=AGENT_B_TOOL_SELECTION_SYSTEM_PROMPT),
+        HumanMessage(content=human_prompt)
+    ]
+    
+    # Call the LLM with the separated messages
+    response = llm.invoke(messages)
     response_text = response.content
     
     logger.info(f"LLM tool selection response: {response_text}")
     
-    # Parse the response to extract the tool decision
+    # Parse the response to extract the tool decision (rest of function remains the same)
     lines = response_text.strip().split('\n')
     decision = {}
     
@@ -140,20 +135,16 @@ def llm_tool_decision(user_input: str) -> ToolDecision:
             decision['reasoning'] = line.replace('Reasoning:', '').strip()
         elif line.startswith('ExtractedData:'):
             decision['extracted_data'] = line.replace('ExtractedData:', '').strip()
-        # elif line.startswith('Website:'):
-        #     decision['website'] = line.replace('Website:', '').strip()
     
     # Default values if parsing fails
     tool_name = decision.get('tool_name', 'schedule_practice_doctors')
     reasoning = decision.get('reasoning', 'Default reasoning: Unable to parse LLM response properly')
     extracted_data = decision.get('extracted_data', user_input)
-    #website = decision.get('website', 'wikipedia.org')
     
     return ToolDecision(
         tool_name=tool_name,
         reasoning=reasoning,
         extracted_data=extracted_data
-        #website=website
     )
 
 def agent_b_node(state:GraphState) -> GraphState:

@@ -7,6 +7,9 @@ from langchain.agents import tool
 from langchain_groq import ChatGroq
 from models.schemas import GraphState
 import os
+from agents.system_prompts import AGENT_A_TOOL_SELECTION_SYSTEM_PROMPT
+from langchain_core.messages import SystemMessage, HumanMessage
+
 
 # Load environment variables
 from dotenv import load_dotenv
@@ -178,37 +181,27 @@ def llm_tool_decision(user_input: str) -> ToolDecision:
     Returns:
         ToolDecision: Contains the selected tool name, reasoning, and extracted parameters
     """
-    # Prepare the prompt for tool selection
-    tool_descriptions = """
-    Available tools:
-    1. tool_one: Processes simple text data with Agent A's first tool
-    2. tool_two: Processes simple text data with Agent A's second tool
-    3. tool_three: Performs a web search on a specific website for information
-    """
     
-    prompt = f"""You are a tool selection assistant. Given a user request, select the most appropriate tool.
+    # Create human message with user input
+    human_prompt = f"""User request: "{user_input}"
+
+Think through which tool would be most appropriate for this request. Consider whether the user needs information lookup, simple processing, or complex processing.
+
+Respond in the exact format specified in the system prompt."""
     
-    {tool_descriptions}
+    # Create messages with separated system and human prompts
+    messages = [
+        SystemMessage(content=AGENT_A_TOOL_SELECTION_SYSTEM_PROMPT),
+        HumanMessage(content=human_prompt)
+    ]
     
-    User request: "{user_input}"
-    
-    Think through which tool would be most appropriate. If the user is asking for information from a website or wants to search for something, use tool_three.
-    If they need simple text processing, choose between tool_one and tool_two based on the complexity of the request.
-    
-    Respond in the following format only:
-    Tool: [selected tool name - must be one of: tool_one, tool_two, tool_three]
-    Reasoning: [your reasoning for selecting this tool]
-    ExtractedData: [the relevant data from the user request to pass to the tool]
-    Website: [only if tool_three is selected, specify which website to search on; default is webmd.com]
-    """
-    
-    # Call the LLM to make the decision
-    response = llm.invoke(prompt)
+    # Call the LLM with the separated messages
+    response = llm.invoke(messages)
     response_text = response.content
     
     logger.info(f"LLM tool selection response: {response_text}")
     
-    # Parse the response to extract the tool decision
+    # Parse the response to extract the tool decision (rest of function remains the same)
     lines = response_text.strip().split('\n')
     decision = {}
     
