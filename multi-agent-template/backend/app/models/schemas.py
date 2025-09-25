@@ -1,90 +1,67 @@
-# backend/app/models/schemas.py
 from pydantic import BaseModel, Field
-from typing import List, Dict, Optional, Literal, Any
-from enum import Enum
-
-class OperationType(str, Enum):
-    ADDITION = "addition"
-    SUBTRACTION = "subtraction"
-    MULTIPLICATION = "multiplication"
-    DIVISION = "division"
-
-class ArithmeticInput(BaseModel):
-    operation: OperationType
-    operands: List[float] = Field(..., min_items=2, description="List of numbers to operate on")
-    
-class ArithmeticOutput(BaseModel):
-    operation: OperationType
-    operands: List[float]
-    result: float
-    success: bool
-    error_message: Optional[str] = None
-
-class AgentStep(BaseModel):
-    agent_name: str
-    operation: OperationType
-    input_data: ArithmeticInput
-    output_data: Optional[ArithmeticOutput] = None
-    execution_order: int
-
-class ReasoningPlan(BaseModel):
-    user_query: str
-    interpretation: str
-    required_operations: List[AgentStep]
-    final_combination_logic: str
+from typing import Optional, Dict, Any, Union
 
 class GraphState(BaseModel):
-    # Core input/output fields
-    user_input: str = ""
-    response: Optional[Any] = None
+    """
+    Enhanced state schema for the healthcare multi-agent system with tool-based routing support.
+    """
     
-    # Routing and workflow control
-    route_to: Optional[str] = None
-    done: Optional[bool] = False
+    # Core user interaction
+    user_input: str = Field(default="", description="The user's input message")
+    response: Union[str, Dict[str, Any]] = Field(default="", description="The agent's response")
     
-    # Healthcare-specific routing context
-    medical_context: Optional[Dict[str, Any]] = Field(default_factory=dict)
-    routing_message: Optional[str] = ""
+    # Routing control
+    route_to: str = Field(default="", description="Next agent or node to route to")
+    done: bool = Field(default=False, description="Whether the conversation is complete")
+    
+    # Enhanced routing context for tool-based system
+    routing_message: Optional[str] = Field(default=None, description="User-friendly routing status message")
+    medical_context: Optional[Dict[str, Any]] = Field(
+        default_factory=dict, 
+        description="Medical and routing context including urgency, confidence, method"
+    )
+    
+    # Agent-specific data
+    agent_data: Optional[Dict[str, Any]] = Field(
+        default_factory=dict,
+        description="Data passed between agents"
+    )
     
     # Session and conversation management
-    session_id: Optional[str] = None
-    conversation_history: List[Dict[str, Any]] = Field(default_factory=list)
+    session_id: Optional[str] = Field(default=None, description="Session identifier")
+    conversation_history: Optional[list] = Field(
+        default_factory=list,
+        description="History of messages in this conversation"
+    )
     
-    # Agent execution tracking
-    agent_call_count: int = 0
-    agent_results: Optional[List[ArithmeticOutput]] = Field(default_factory=list)
-    
-    # Legacy arithmetic fields (for backward compatibility)
-    reasoning_plan: Optional[ReasoningPlan] = None
-    final_result: Optional[str] = None
-    error: Optional[str] = None
+    # Error handling
+    error: Optional[str] = Field(default=None, description="Error message if any")
     
     class Config:
-        arbitrary_types_allowed = True
-        # Allow extra fields for future extensibility
-        extra = "allow"
-
-class ChatRequest(BaseModel):
-    message: str
-    conversation_id: Optional[str] = None
-
-# Replace the ChatResponse class:
-
-class ChatResponse(BaseModel):
-    response: Any  # Changed from str to Any to handle both strings and dictionaries
-    conversation_id: Optional[str] = None
-    medical_context: Optional[Dict[str, Any]] = None
-    routing_info: Optional[Dict[str, Any]] = None
-    reasoning_steps: Optional[List[str]] = None
-    calculations: Optional[List[ArithmeticOutput]] = None
-
-class HealthcareRoutingDecision(BaseModel):
-    primary_agent: str = Field(..., description="Primary agent to route to: SYMPTOM_CHECKER, APPOINTMENT_SCHEDULER, or INSURANCE_INQUIRER")
-    secondary_agents: List[str] = Field(default=[], description="Additional agents if needed")
-    routing_sequence: List[str] = Field(..., description="Ordered list of agent execution")
-    reasoning: str = Field(..., description="Clear explanation of routing decision")
-    urgency_level: str = Field(..., description="Urgency level: low, medium, high, emergency")
-    patient_intent: str = Field(..., description="Brief description of patient intent")
-    expected_workflow: str = Field(..., description="How agents will work together")
-    validation_criteria: str = Field(..., description="How to verify routing was correct")
-    tool_selection: str = Field(..., description="Criteria for selecting tools or resources")
+        """Pydantic configuration"""
+        extra = "allow"  # Allow additional fields
+        json_encoders = {
+            # Add custom encoders if needed
+        }
+    
+    def add_to_history(self, role: str, content: str):
+        """Add a message to conversation history"""
+        if self.conversation_history is None:
+            self.conversation_history = []
+        
+        self.conversation_history.append({
+            "role": role,
+            "content": content,
+            "timestamp": None  # Could add actual timestamp here
+        })
+    
+    def get_routing_summary(self) -> str:
+        """Get a summary of the routing decision"""
+        if not self.medical_context:
+            return "Standard routing"
+        
+        method = self.medical_context.get('routing_method', 'unknown')
+        confidence = self.medical_context.get('routing_confidence', 'medium')
+        agent = self.medical_context.get('selected_agent', 'unknown')
+        
+        return f"Routed to {agent} via {method} (confidence: {confidence})"
