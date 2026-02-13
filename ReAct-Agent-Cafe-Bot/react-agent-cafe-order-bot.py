@@ -122,7 +122,8 @@ def generate_response(state: State) -> State:
     # Call the Llama model on Groq
     response = llm.chat.completions.create(
     #response = llm.invoke(
-        model="llama3-8b-8192",
+        #model="llama3-8b-8192",
+        model="llama-3.1-8b-instant",
         messages=[
             {"role": "system", "content": formatted_system_prompt},
             {"role": "user", "content": user_prompt}
